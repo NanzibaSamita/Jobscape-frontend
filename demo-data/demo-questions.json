@@ -1,0 +1,52 @@
+{
+    "questions": [
+        {
+            "id": 1,
+            "type": "text",
+            "question": "What is the lowest salary offer you would consider?",
+            "required": true
+        },
+        {
+            "id": 2,
+            "type": "text",
+            "question": "What excites you most about the opportunity to be a Product Manager in our Operations & Management department?",
+            "required": false
+        },
+        {
+            "id": 3,
+            "type": "text",
+            "question": "Can you describe a time when you led a product from ideation to launch?",
+            "required": true
+        },
+        {
+            "id": 4,
+            "type": "select",
+            "question": "What is the lowest salary offer you would consider?",
+            "required": true,
+            "options": [
+                "1,00,000",
+                "80,000",
+                "50,000",
+                "30,000"
+            ]
+        },
+        {
+            "id": 5,
+            "type": "multi-select",
+            "question": "What is the lowest salary offer you would consider?",
+            "required": true,
+            "options": [
+                "1,00,000",
+                "80,000",
+                "50,000",
+                "30,000"
+            ]
+        },
+        {
+            "id": 6,
+            "type": "text",
+            "question": "If you get selected, from when you can join?",
+            "required": true
+        }
+    ]
+}
