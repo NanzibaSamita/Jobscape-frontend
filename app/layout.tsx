@@ -8,7 +8,6 @@ import ToastProvider from "@/contexts/toast-context";
 import BetaMessage from "@/components/BetaMessage";
 // import { Mona_Sans } from "next/font/google"
 
-
 // const monaSans = Mona_Sans({
 //   subsets: ["latin"],
 //   weight: "400",
@@ -17,9 +16,9 @@ import BetaMessage from "@/components/BetaMessage";
 // })
 
 export const metadata: Metadata = {
-  title: 'Wanted.AI',
+  title: "JBscape",
   icons: {
-    icon: '/favicon.ico',
+    icon: "/images/logo.png",
   },
 };
 export default function RootLayout({
@@ -29,12 +28,15 @@ export default function RootLayout({
 }>) {
   return (
     <html className="h-screen w-screen scrollbar-hide" lang="en">
-      <body
-        className={`bg-linear antialiased`}
-      >
+      <body className={`bg-linear antialiased`}>
         <ToastProvider>
           <StoreProvider>
-            <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="light"
+              enableSystem
+              disableTransitionOnChange
+            >
               <UIProvider>
                 <BetaMessage />
                 {children}
