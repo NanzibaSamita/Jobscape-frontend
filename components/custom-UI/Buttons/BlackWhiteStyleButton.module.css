@@ -1,0 +1,81 @@
+.buttonWrapper {
+  position: relative;
+  display: inline-block;
+  border-radius: 49px;
+  background: #000000;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.5s ease, color 0.3s ease;
+  user-select: none;
+  border: none;
+}
+
+/* Peel effect corner */
+.buttonWrapper::after {
+  content: "";
+  position: absolute;
+  bottom: -155px;
+  right: -30px;
+  width: 120px;
+  height: 120px;
+  background: rgb(255, 255, 255);
+  border-top-left-radius: 35%;
+  transform: scale(1.2) rotate(34deg);
+  transform-origin: bottom right;
+  transition: transform 1s ease-in-out, background 0.3s;
+  z-index: 0;
+}
+
+.buttonWrapper:hover::after {
+  transform: scale(6) rotate(0deg);
+}
+
+.buttonWrapper:active::after {
+  background: #ffd209;
+}
+
+/* Inner wrapper for padding */
+.innerContent {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem 4rem;
+  border-radius: 9999px;
+  z-index: 1;
+  overflow: hidden;
+}
+
+/* Text sliding */
+.text1,
+.text2 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: top 0.5s;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.text1 {
+  top: 0;
+  color: rgb(255, 255, 255);
+}
+
+.text2 {
+  top: 200%;
+  color: rgb(0, 0, 0);
+}
+
+.buttonWrapper:hover .text1 {
+  top: -300%;
+}
+
+.buttonWrapper:hover .text2 {
+  top: 0;
+}

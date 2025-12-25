@@ -1,0 +1,37 @@
+.cardWrapper {
+  position: relative;
+  overflow: hidden;
+  padding: 2rem;
+  border-radius: 1.5rem;
+  background: #000000;
+  color: #000000;
+  border: none;
+  cursor: pointer;
+  height: 100%;
+  width: 100%;
+}
+
+.cardWrapperContent {
+  position: relative;
+  z-index: 1;
+}
+
+/* Yellow swoosh corner */
+.cardWrapper::before {
+  content: "";
+  position: absolute;
+  bottom: -120px;
+  right: -20px;
+  width: 120px;
+  height: 120px;
+  background: #facc15; /* Yellow */
+  border-top-left-radius: 40%;
+  transform: scale(1.3) rotate(30deg);
+  transform-origin: bottom right;
+  transition: transform 0.5s ease-in-out;
+  z-index: 0;
+}
+
+.cardWrapper:hover::before {
+  transform: scale(6);
+}
