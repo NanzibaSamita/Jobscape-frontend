@@ -2,54 +2,38 @@
 import React from "react";
 import styles from "./BlackStyleButton.module.css";
 
-interface WhiteStyleButtonProps {
+interface BlackStyleButtonProps {
   title?: string | React.ReactNode;
   disabled?: boolean;
   onClick?: () => void;
   fullWidth?: boolean;
-  customStyles?: {
-    buttonWrapper?: React.CSSProperties;
-    text1?: React.CSSProperties;
-    text2?: React.CSSProperties;
-    button?: React.CSSProperties;
-  };
+  className?: string; // optional extra classes if you want
+  style?: React.CSSProperties; // optional inline override
 }
 
 export default function BlackStyleButton({
   title,
   disabled = false,
   onClick,
-  customStyles = {},
   fullWidth = false,
-}: WhiteStyleButtonProps) {
+  className = "",
+  style,
+}: BlackStyleButtonProps) {
   return (
-    <div className={`w-auto flex justify-center items-center ${fullWidth ? "w-full" : "max-w-min"}`}>
+    <div
+      className={`flex justify-center items-center ${
+        fullWidth ? "w-full" : "w-auto"
+      }`}
+    >
       <button
         disabled={disabled}
         onClick={onClick}
-        className={styles.buttonWrapper}
-        style={{
-          ...customStyles?.button,
-          ...fullWidth && { width: "100%" }
-        }
-        }
+        className={`${styles.buttonWrapper} ${
+          fullWidth ? "w-full" : ""
+        } ${className}`}
+        style={style}
       >
-        <div
-          style={{
-            ...customStyles?.buttonWrapper
-          }}
-          className={styles.innerContent}>
-          <p
-            style={{
-              ...customStyles?.text1
-            }}
-            className={styles.text1}>{title}</p>
-          <p
-            style={{
-              ...customStyles?.text2
-            }}
-            className={styles.text2}>{title}</p>
-        </div>
+        {title}
       </button>
     </div>
   );

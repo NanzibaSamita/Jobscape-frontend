@@ -1,80 +1,43 @@
+/* BlackStyleButton.module.css */
 .buttonWrapper {
-  position: relative;
-  display: inline-block;
-  border-radius: 49px;
-  background: #ffd209;
-  cursor: pointer;
-  overflow: hidden;
-  transition: background 0.5s ease, color 0.3s ease;
-  user-select: none;
   border: none;
+  cursor: pointer;
+  user-select: none;
+
+  /* ✅ Tailwind equivalent */
+  border-radius: 9999px; /* rounded-full */
+  padding: 1rem 2.5rem; /* py-4 px-10 */
+  font-size: 0.875rem; /* text-sm */
+  font-weight: 600; /* font-semibold */
+  color: #000; /* text-black */
+
+  background: linear-gradient(
+    to right,
+    #8b5cf6,
+    #c084fc
+  ); /* bg-gradient-to-r */
+  box-shadow: 0 10px 30px rgba(140, 82, 255, 0.25); /* shadow-[...] */
+
+  transition: filter 150ms ease; /* transition */
 }
 
-/* Peel effect corner */
-.buttonWrapper::after {
-  content: "";
-  position: absolute;
-  bottom: -160px;
-  right: -30px;
-  width: 120px;
-  height: 120px;
-  background: black;
-  border-top-left-radius: 35%;
-  transform: scale(1.2) rotate(34deg);
-  transform-origin: bottom right;
-  transition: transform 1s ease-in-out, background 0.3s;
-  z-index: 0;
+.buttonWrapper:hover {
+  filter: brightness(1.1); /* hover:brightness-110 */
 }
 
-.buttonWrapper:hover::after {
-  transform: scale(6) rotate(0deg);
+.buttonWrapper:active {
+  filter: brightness(0.95); /* active:brightness-95 */
 }
 
-.buttonWrapper:active::after {
-  background: #ffd209;
+.buttonWrapper:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
 }
 
-/* Inner wrapper for padding */
-.innerContent {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.2rem 4rem;
-  border-radius: 9999px;
-  z-index: 1;
-  overflow: hidden;
-}
-
-/* Text sliding */
+/* (not used anymore, but keep harmlessly) */
+.innerContent,
 .text1,
 .text2 {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: top 0.5s;
-  white-space: nowrap;
-  font-size: 13px;
-}
-
-.text1 {
-  top: 0;
-}
-
-.text2 {
-  top: 200%;
-  color: white;
-}
-
-.buttonWrapper:hover .text1 {
-  top: -300%;
-}
-
-.buttonWrapper:hover .text2 {
-  top: 0;
+  display: none;
 }
