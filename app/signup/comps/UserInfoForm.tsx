@@ -1,472 +1,337 @@
-"use client"
+"use client";
 
-import { useRef, useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Loader2, Eye, EyeOff, Loader } from "lucide-react";
-import { axiosInstance } from "@/lib/axios/axios"
-import uniqueID, { getMaxRoleWeight, splitFullName } from "@/lib/utils"
-import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton"
-import { toast } from "react-toastify"
-import { loginUser } from "@/lib/store/slices/authSlice"
-import { loginAction } from "@/lib/cookies"
-// import { REDIRECT_URLS } from "@/local/redirectDatas"
-import { useAppDispatch } from "@/lib/store"
-import { useRouter } from "next/navigation"
-const CREATE_USER_URL = "/api/v1/user-store";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Eye, EyeOff, Loader, Loader2, Mail } from "lucide-react";
+import { axiosInstance } from "@/lib/axios/axios";
+
+import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton";
+import { toast } from "react-toastify";
+import { useRouter } from "next/navigation";
+
+// ===== Backend endpoints (FastAPI router prefix="/auth") =====
+const REGISTER_JOB_SEEKER_URL = "/auth/register/job-seeker";
+const REGISTER_EMPLOYER_URL = "/auth/register/employer";
+const REQUEST_VERIFY_EMAIL_URL = "/auth/verify-email/request";
+
 // Form schema with validation
 const userInfoSchema = z
-    .object({
-        user_first_name: z
-            .string()
-            .min(2, { message: "First name must be at least 2 characters." })
-            .max(50, { message: "First name must not exceed 50 characters." }),
-        user_last_name: z
-            .string()
-            .min(2, { message: "Last name must be at least 2 characters." })
-            .max(50, { message: "Last name must not exceed 50 characters." }),
-        password: z
-            .string()
-            .min(8, { message: "Password must be at least 8 characters." })
-            .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter." })
-            .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter." })
-            .regex(/[0-9]/, { message: "Password must contain at least one number." })
-            .regex(/[^A-Za-z0-9]/, { message: "Password must contain at least one special character." }),
-        confirmPassword: z.string(),
-        email: z.string().email({
-            message: "Please enter a valid email address.",
-        }),
-    })
-    .refine((data) => data.password === data.confirmPassword, {
-        message: "Passwords do not match.",
-        path: ["confirmPassword"],
-    })
+  .object({
+    full_name: z
+      .string()
+      .min(3, { message: "Full name must be at least 3 characters." })
+      .max(100, { message: "Full name must not exceed 100 characters." }),
 
-type UserInfoValues = z.infer<typeof userInfoSchema>
+    password: z
+      .string()
+      .min(8, { message: "Password must be at least 8 characters." })
+      .regex(/[A-Z]/, {
+        message: "Password must contain at least one uppercase letter.",
+      })
+      .regex(/[a-z]/, {
+        message: "Password must contain at least one lowercase letter.",
+      })
+      .regex(/[0-9]/, { message: "Password must contain at least one number." })
+      .regex(/[^A-Za-z0-9]/, {
+        message: "Password must contain at least one special character.",
+      }),
+    confirmPassword: z.string(),
+    email: z.string().email({ message: "Please enter a valid email address." }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match.",
+    path: ["confirmPassword"],
+  });
+
+type UserInfoValues = z.infer<typeof userInfoSchema>;
 
 interface UserInfoFormProps {
+  email: string;
+  onComplete: () => void;
+  editableEmail?: boolean;
+  recruiter?: boolean;
+  defaultValues?: { [key: string]: any };
+  // Keeping these props so PurposeSwitcher can still pass them,
+  // but we won't store CV during signup in "Option 1" flow.
+  storeCvJSON: (
+    data: { [key: string]: any },
+    id: string,
     email: string
-    onComplete: () => void
-    editableEmail?: boolean
-    recruiter?: boolean
-    defaultValues?: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        [key: string]: any
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    storeCvJSON: (data: { [key: string]: any }, id: string, email: string) => void,
-    cvData: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        [key: string]: any,
-    } | null
+  ) => void;
+  cvData: { [key: string]: any } | null;
 }
 
-export default function UserInfoForm({ email: rawEmail, onComplete, defaultValues, editableEmail = false, recruiter = false, storeCvJSON, cvData }: UserInfoFormProps) {
-    const [email, setEmail] = useState<string>(rawEmail);
-    const [isLoading, setIsLoading] = useState(false);
-    const [cvStoreLoading, setCvStoreLoading] = useState(false);
-    const [showPassword, setShowPassword] = useState(false)
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-    const [verifyEmail, setVerifyEmail] = useState(false);
-    const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const [tokenState, setTokenState] = useState("");
-    const [formData, setFormData] = useState<UserInfoValues | null>(null);
-    const dispatch = useAppDispatch();
-    const router = useRouter();
-    const [otpLoading, setOtpLoading] = useState(false);
+export default function UserInfoForm({
+  email: rawEmail,
+  onComplete,
+  defaultValues,
+  editableEmail = false,
+  recruiter = false,
+}: UserInfoFormProps) {
+  const [email, setEmail] = useState<string>(rawEmail);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-    const form = useForm<UserInfoValues>({
-        resolver: zodResolver(userInfoSchema),
-        defaultValues: {
-            email: !editableEmail ? email : defaultValues?.email || "",
-            user_first_name: defaultValues?.name ? splitFullName(defaultValues?.name)?.firstName : "",
-            user_last_name: defaultValues?.name ? splitFullName(defaultValues?.name)?.lastName : "",
-            password: "",
-            confirmPassword: "",
-        },
-    })
-    const handleInputChange = (index: number, value: string) => {
-        // Only allow single digit
-        if (value.length > 1) return
+  // Option 1 UI: show "check your email link" screen after register
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
 
-        const newOtp = [...otp]
-        newOtp[index] = value
+  const router = useRouter();
 
-        setOtp(newOtp)
+  const form = useForm<UserInfoValues>({
+    resolver: zodResolver(userInfoSchema),
+    defaultValues: {
+      email: !editableEmail ? email : defaultValues?.email || "",
+      full_name: defaultValues?.name || "",
+      password: "",
+      confirmPassword: "",
+    },
+  });
 
-        // Auto-focus next input
-        if (value && index < 5) {
-            inputRefs.current[index + 1]?.focus()
-        }
+  async function requestVerificationEmail(targetEmail: string) {
+    setResendLoading(true);
+    try {
+      await axiosInstance.post(REQUEST_VERIFY_EMAIL_URL, {
+        email: targetEmail,
+      });
+      toast.success("Verification email sent. Please check your inbox.");
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.response?.data?.message ||
+          "Failed to send verification email."
+      );
+    } finally {
+      setResendLoading(false);
     }
+  }
 
-    const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-        if (e.key === "Backspace" && !otp[index] && index > 0) {
-            // Move to previous input on backspace if current is empty
-            inputRefs.current[index - 1]?.focus()
-        }
-    }
-    const handlePaste = (e: React.ClipboardEvent) => {
-        e.preventDefault()
-        const pastedData = e.clipboardData.getData("text").slice(0, 6)
-        const newOtp = [...otp]
+  async function onSubmit(data: UserInfoValues) {
+    setIsLoading(true);
+    setEmail(data.email);
 
-        for (let i = 0; i < pastedData.length && i < 6; i++) {
-            if (/^\d$/.test(pastedData[i])) {
-                newOtp[i] = pastedData[i]
-            }
-        }
-
-        setOtp(newOtp)
-
-        // Focus the next empty input or last input
-        const nextEmptyIndex = newOtp.findIndex((digit) => !digit)
-        const focusIndex = nextEmptyIndex === -1 ? 5 : nextEmptyIndex
-        inputRefs.current[focusIndex]?.focus()
-    }
-    const handleVerify = async () => {
-        const otpString = otp.join("")
-        if (otpString.length === 6) {
-            setIsLoading(true);
-            try {
-                const res = await axiosInstance.post("/api/v1/email-verify", {
-                    email: email,
-                    otp: otpString,
-                    otp_token: tokenState,
-                });
-
-                if (res.status === 200 || res.status === 201) {
-                    if (formData) {
-                        handelCreate(formData);
-                    }
-                } else {
-                    console.warn("Unexpected response:", res);
-                }
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            } catch (err: any) {
-                console.error("verifyEmail error:", err?.response || err);
-                toast.error(err?.response?.data?.message || "An error occurred while verifying email.");
-            }
-            finally {
-                setIsLoading(false);
-            }
-        } else {
-            toast.error("Please enter a valid 6-digit OTP.");
-        }
-    }
-
-    async function handleResendOTP() {
-        setOtp(["", "", "", "", "", ""]);
-        inputRefs.current[0]?.focus();
-        try {
-            const res = await axiosInstance.post("/api/v1/send-otp-for-register", {
-                email: email,
-            });
-
-            if (res.status === 200 || res.status === 201) {
-                setTokenState(res.data.data);
-            } else {
-                console.warn("Unexpected response:", res);
-            }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-            toast.error(err?.response?.data?.message || "An error occurred while sending OTP.");
-            // Optional: Show error toast here
-        }
-    }
-
-    function handelCreate(data: UserInfoValues) {
-        const rawData = {
-            email: data.email,
-            user_first_name: data.user_first_name,
-            user_last_name: data.user_last_name,
-            password: data.password,
-            user_name: `${data.user_first_name}-${uniqueID()}`,
-        }
-        setIsLoading(true);
-        setCvStoreLoading(true);
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const params: any = {};
-            if (recruiter) {
-                params["recruiter"] = recruiter;
-            } else {
-                params["job_seeker"] = true;
-            }
-            const query = new URLSearchParams(params).toString();
-            axiosInstance.post(`${CREATE_USER_URL}${query ? "?" + query : ""}`, rawData).then(async (res) => {
-                const userData = res?.data?.data?.user;
-                if (cvData && userData) {
-                    const cvDataRaw = JSON.parse(JSON.stringify(cvData));
-                    delete cvDataRaw.specificData;
-                    await storeCvJSON(cvDataRaw, userData.id, data.email);
-                }
-                const roleWeight: number | string | null = getMaxRoleWeight(userData); // Default role weight for new users
-                dispatch(loginUser({ user: { ...userData }, token: res?.data?.data?.token, roleWeight }));
-                const roleId = userData.roles.find((role: {
-                    name: string,
-                    role_weight: string,
-                    pivot: {
-                        model_type: string,
-                        model_id: number,
-                        role_id: number
-                    }
-                }) => Number(role.role_weight) === Number(roleWeight))?.pivot.role_id || null;
-                await loginAction(userData.id, userData.user_name, res?.data?.data?.token, roleId, roleWeight);
-                // const props: string = roleWeight?.toString() || "base";
-                router.push("/profile-update");
-                onComplete()
-            })
-                .catch((err) => {
-                    console.log(err?.response);
-                    if (err?.response?.data?.message) {
-                        console.log(err?.response?.data?.message);
-                    } else {
-                        console.log("An error occurred while creating the user account.");
-                    }
-                    console.log(err);
-                })
-                .finally(() => {
-                    setIsLoading(false)
-                    setCvStoreLoading(false);
-                });
-        } catch (error) {
-            console.error("File upload failed:", error);
-        } finally {
-        }
-    }
-
-    async function sendOtpForRegister(
-        email: string,
-    ) {
-        setOtpLoading(true);
-        try {
-            const res = await axiosInstance.post("/api/v1/send-otp-for-register", {
-                email,
-            });
-
-            if (res.status === 200 || res.status === 201) {
-                setVerifyEmail(true);
-                setTokenState(res.data.data);
-                setOtp(["", "", "", "", "", ""]);
-                inputRefs.current[0]?.focus();
-            } else {
-                console.warn("Unexpected response:", res);
-            }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-            toast.error(err?.response?.data?.message || "An error occurred while sending OTP.");
-            // Optional: Show error toast here
-        }
-        finally {
-            setOtpLoading(false)
-        }
+    const payload = {
+      email: data.email,
+      password: data.password,
+      full_name: data.full_name.trim(),
     };
 
-    function onSubmit(data: UserInfoValues) {
-        setEmail(data.email);
-        setFormData(data);
-        setIsLoading(true);
-        axiosInstance
-            .get("/api/v1/check-email".concat(`?email=${data.email}`))
-            .then(() => {
-                form.setError("email", {
-                    type: "email",
-                    message: "This email already exists. Please use a different email.",
-                });
-            })
-            .catch(() => {
-                sendOtpForRegister(data.email)
-            })
-            .finally(() => {
-                setIsLoading(false);
-            });
+    try {
+      const url = recruiter ? REGISTER_EMPLOYER_URL : REGISTER_JOB_SEEKER_URL;
+      await axiosInstance.post(url, payload);
+
+      // Backend sends verification EMAIL LINK automatically after registration.
+      setVerificationSent(true);
+
+      // Tell parent (PurposeSwitcher) we finished signup step
+      // (it can move to the next step if you want)
+      onComplete();
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        "An error occurred while creating the account.";
+
+      // Your backend returns 400 for "Email already registered"
+      if (status === 400) {
+        form.setError("email", {
+          type: "manual",
+          message: detail || "Email already registered",
+        });
+      } else {
+        toast.error(detail);
+      }
+    } finally {
+      setIsLoading(false);
     }
+  }
 
-    const isComplete = otp.every((digit) => digit !== "");
+  if (verificationSent) {
     return (
-        <>
-            {
-                verifyEmail ? <>
-                    <div className="relative w-full max-w-full">
-                        <div className="lg:space-y-6 space-y-4">
-                            {/* Header */}
-                            <div className="text-center">
-                                <h2 className="text-3xl font-bold">Email Verification</h2>
-                                <p className="text-gray-600 text-sm text-muted-foreground">{`Please check your email (including Spam/Junk folder) for the verification code.`}</p>
+      <div className="w-full space-y-4">
+        <div className="text-center space-y-2">
+          <div className="mx-auto w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+            <Mail className="w-6 h-6 text-[#7C3AED]" />
+          </div>
 
-                                <span className="text-black font-medium text-muted-foreground pr-2">{email || "null"}</span>
-                            </div>
+          <h2 className="text-2xl font-bold">Verify your email</h2>
+          <p className="text-sm text-muted-foreground">
+            We sent a verification link to{" "}
+            <span className="font-medium text-black">{email}</span>. <br />
+            Open your email and click the link to verify your account.
+          </p>
 
-                            {/* OTP Input */}
-                            <div className="flex justify-center lg:gap-3 gap-2">
-                                {otp.map((digit, index) => (
-                                    <input
-                                        key={index}
-                                        ref={(el) => { inputRefs.current[index] = el; }}
-                                        type="text"
-                                        inputMode="numeric"
-                                        maxLength={1}
-                                        value={digit}
-                                        onChange={(e) => handleInputChange(index, e.target.value)}
-                                        onKeyDown={(e) => handleKeyDown(index, e)}
-                                        onPaste={handlePaste}
-                                        className="lg:w-14 lg:h-14 w-10 h-10 text-center text-xl font-medium border-2 border-primary-foreground/10 focus:border-primary dark:border-muted rounded-xl dark:focus:border-muted-foreground focus:outline-none transition-colors"
-                                    />
-                                ))}
-                            </div>
+          <p className="text-xs text-muted-foreground">
+            If you don’t see it, check your Spam/Junk folder.
+          </p>
+        </div>
 
-                            {/* Resend Section */}
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-muted-foreground">Didnt receive OTP ?</span>
-                                <button
-                                    onClick={handleResendOTP}
-                                    className="text-muted-foreground hover:text-muted-foreground/40 font-medium transition-colors"
-                                >
-                                    Resend OTP
-                                </button>
-                            </div>
+        <div className="space-y-3">
+          <BlackStyleButton
+            fullWidth
+            disabled={resendLoading}
+            onClick={() => requestVerificationEmail(email)}
+            title={resendLoading ? "Sending..." : "Resend verification email"}
+          />
 
-                            {/* Verify Button */}
-                            <BlackStyleButton
-                                fullWidth
-                                disabled={!isComplete || isLoading || cvStoreLoading}
-                                onClick={handleVerify}
-                                title={(isLoading || cvStoreLoading) ? "Verifying..." : "Verify Email"}
-                            />
-                        </div>
-                    </div>
-                </> : <Form {...form}>
-                    {(isLoading || otpLoading) && <div className="absolute top-0 left-0 h-full w-full flex items-center justify-center backdrop-blur-sm z-[2]">
-                        <Loader className="h-6 w-6 text-slate-400 animate-spin duration-1000" />
-                    </div>}
-                    {!editableEmail && <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                        <p className="text-sm text-blue-700">
-                            Signing up with: <span className="font-medium">{email}</span>
-                        </p>
-                    </div>}
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 m-1">
-                        {
-                            editableEmail && (<FormField
-                                control={form.control}
-                                name="email"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Email</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Enter your email" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />)
-                        }
-                        <FormField
-                            control={form.control}
-                            name="user_first_name"
-                            defaultValue={cvData?.user_first_name || ""}
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>First Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Enter your first name" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="user_last_name"
-                            defaultValue={cvData?.user_last_name || ""}
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Last Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Enter your last name" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+          <button
+            type="button"
+            className="w-full text-sm text-primary hover:underline"
+            onClick={() => router.push("/login")}
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-                        <FormField
-                            control={form.control}
-                            name="password"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Password</FormLabel>
-                                    <FormControl>
-                                        <div className="relative">
-                                            <Input type={showPassword ? "text" : "password"} placeholder="Create a password" {...field} />
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                            >
-                                                {showPassword ? (
-                                                    <EyeOff className="h-4 w-4 text-gray-400" />
-                                                ) : (
-                                                    <Eye className="h-4 w-4 text-gray-400" />
-                                                )}
-                                            </Button>
-                                        </div>
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="confirmPassword"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Confirm Password</FormLabel>
-                                    <FormControl>
-                                        <div className="relative">
-                                            <Input
-                                                type={showConfirmPassword ? "text" : "password"}
-                                                placeholder="Confirm your password"
-                                                {...field}
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                            >
-                                                {showConfirmPassword ? (
-                                                    <EyeOff className="h-4 w-4 text-gray-400" />
-                                                ) : (
-                                                    <Eye className="h-4 w-4 text-gray-400" />
-                                                )}
-                                            </Button>
-                                        </div>
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <BlackStyleButton
-                            fullWidth
-                            disabled={isLoading || otpLoading}
-                            title={(isLoading || otpLoading) ? <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Creating Account
-                            </> : "Create Account"}
-                        />
-                    </form>
-                </Form>
+  return (
+    <>
+      <Form {...form}>
+        {isLoading && (
+          <div className="absolute top-0 left-0 h-full w-full flex items-center justify-center backdrop-blur-sm z-[2]">
+            <Loader className="h-6 w-6 text-slate-400 animate-spin duration-1000" />
+          </div>
+        )}
+
+        {!editableEmail && (
+          <div className="bg-blue-50 p-4 rounded-lg mb-4">
+            <p className="text-sm text-blue-700">
+              Signing up with: <span className="font-medium">{email}</span>
+            </p>
+          </div>
+        )}
+
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 m-1">
+          {editableEmail && (
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter your email" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          <FormField
+            control={form.control}
+            name="full_name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Full Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter your full name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Password</FormLabel>
+                <FormControl>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Create a password"
+                      {...field}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-400" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-400" />
+                      )}
+                    </Button>
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Confirm Password</FormLabel>
+                <FormControl>
+                  <div className="relative">
+                    <Input
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Confirm your password"
+                      {...field}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-400" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-400" />
+                      )}
+                    </Button>
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <BlackStyleButton
+            fullWidth
+            disabled={isLoading}
+            title={
+              isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating Account
+                </>
+              ) : (
+                "Create Account"
+              )
             }
-        </>
-
-    )
+          />
+        </form>
+      </Form>
+    </>
+  );
 }
