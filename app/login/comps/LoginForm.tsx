@@ -247,9 +247,9 @@ export default function LoginForm() {
           </div>
         </div>
       </div>
-      <div
+      {/* <div
         className={`w-full lg:block hidden bg-[url('/images/form-background.png')]`}
-      />
+      /> */}
     </>
   );
 }
