@@ -1,9 +1,9 @@
 import LoginForm from "./comps/LoginForm";
 
 export default function Page() {
-    return (
-        <div className="lg:grid lg:grid-cols-2 h-screen">
-            <LoginForm />
-        </div>
-    )
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center bg-white px-4">
+      <LoginForm />
+    </div>
+  );
 }

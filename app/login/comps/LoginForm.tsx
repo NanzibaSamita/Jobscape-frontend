@@ -107,149 +107,129 @@ export default function LoginForm() {
       password: "",
     },
   });
+
   return (
     <>
-      <div className="w-full">
+      <div className="relative min-h-screen w-full flex items-center justify-center bg-white px-4">
         {loading && (
-          <div className="absolute top-0 left-0 h-full w-full flex items-center justify-center backdrop-blur-sm z-[2]">
-            <Loader className="h-6 w-6 text-slate-400 animate-spin duration-1000" />
+          <div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm z-[2]">
+            <Loader className="h-6 w-6 text-slate-400 animate-spin" />
           </div>
         )}
-        <div className="max-w-sm w-full mx-auto translate-x-0 lg:translate-x-16 px-2 py-6 lg:px-0 lg:py-0 max-h-screen flex flex-col lg:mt-16 mt-4">
-          {/* <h1 className={`text-4xl text-black dark:text-primary lg:mb-16 `}>
-            WANTED<span className="text-primary">.AI</span>
-          </h1> */}
 
-          <div className="lg:mt-24 mt-24">
-            <div className="">
-              <div className="mb-4">
-                <h2 className="text-2xl lg:text-3xl font-bold mb-2">
-                  Welcome Back <br /> JBscape!
-                </h2>
-              </div>
-            </div>
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(handelContinue)}
-                className="space-y-2"
-              >
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        {/* <div className="relative z-[1]"> */}
-                        {/* <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" /> */}
+        <div className="w-full max-w-sm flex flex-col">
+          <div className="mb-6 text-center">
+            <h2 className="text-2xl lg:text-3xl font-bold">
+              Welcome Back <br /> JBscape!
+            </h2>
+          </div>
+
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(handelContinue)}
+              className="space-y-3"
+            >
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter work email address"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <div className="relative">
                         <Input
-                          placeholder="Enter work email address"
-                          // className="pl-3 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                          // onChange={(e) => setEmail(e.target.value)}
-                          // value={email}
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Enter password"
                           {...field}
                         />
-                        {/* </div> */}
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-gray-400" />
+                          )}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex items-center justify-between">
                 <FormField
                   control={form.control}
-                  name="password"
+                  name="rememberMe"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
+                    <FormItem className="flex items-center space-x-2">
                       <FormControl>
-                        <div className="relative z-[1]">
-                          {/* <Asterisk className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" /> */}
-                          <Input
-                            type={showPassword ? "text" : "password"}
-                            placeholder="Enter password"
-                            // className="pl-3 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                            // onChange={(e) => setEmail(e.target.value)}
-                            // value={email}
-                            {...field}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                            onClick={() => setShowPassword(!showPassword)}
-                          >
-                            {showPassword ? (
-                              <EyeOff className="h-4 w-4 text-gray-400" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-gray-400" />
-                            )}
-                          </Button>
-                        </div>
+                        <input
+                          type="checkbox"
+                          checked={field.value || false}
+                          onChange={(e) => field.onChange(e.target.checked)}
+                          className="accent-primary w-4 h-4"
+                        />
                       </FormControl>
-                      <FormMessage />
+                      <FormLabel className="text-xs font-light cursor-pointer">
+                        Remember me
+                      </FormLabel>
                     </FormItem>
                   )}
                 />
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between">
-                    <FormField
-                      control={form.control}
-                      name="rememberMe"
-                      render={({ field }) => (
-                        <FormItem className="flex items-center space-x-2">
-                          <FormControl>
-                            <input
-                              type="checkbox"
-                              id="rememberMe"
-                              checked={field.value || false}
-                              onChange={(e) => field.onChange(e.target.checked)}
-                              className="accent-primary w-4 h-4"
-                            />
-                          </FormControl>
-                          <FormLabel
-                            htmlFor="rememberMe"
-                            className="text-xs font-extralight cursor-pointer"
-                          >
-                            Remember me
-                          </FormLabel>
-                        </FormItem>
-                      )}
-                    />
-                    <button
-                      type="button"
-                      className="text-xs font-extralight hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary"
-                      onClick={() => router.push("/forgot-password")}
-                      tabIndex={0}
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <BlackStyleButton
-                    fullWidth
-                    disabled={loading}
-                    title={
-                      loading ? <Loader2 className="animate-spin" /> : "Sign in"
-                    }
-                  />
-                </div>
-              </form>
-            </Form>
-            <p className="text-sm font-light text-center py-2">
-              Don&apos;t have an account yet?{" "}
-              <span
-                className="cursor-pointer text-yellow-600"
-                onClick={() => router.push("/signup")}
-              >
-                Sign up
-              </span>
-            </p>
-          </div>
+
+                <button
+                  type="button"
+                  className="text-xs font-light text-muted-foreground hover:text-primary focus:outline-none"
+                  onClick={() => router.push("/forgot-password")}
+                >
+                  Forgot password?
+                </button>
+              </div>
+
+              <BlackStyleButton
+                fullWidth
+                disabled={loading}
+                title={
+                  loading ? <Loader2 className="animate-spin" /> : "Sign in"
+                }
+              />
+            </form>
+          </Form>
+
+          <p className="text-sm font-light text-center mt-3">
+            Don&apos;t have an account yet?{" "}
+            <span
+              className="cursor-pointer text-primary hover:underline"
+              onClick={() => router.push("/signup")}
+            >
+              Sign up
+            </span>
+          </p>
         </div>
       </div>
-      {/* <div
-        className={`w-full lg:block hidden bg-[url('/images/form-background.png')]`}
-      /> */}
     </>
   );
 }
