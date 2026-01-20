@@ -22,7 +22,7 @@ import { toast } from "react-toastify";
 import { useRouter } from "next/navigation";
 
 // ===== Backend endpoints (FastAPI router prefix="/auth") =====
-const REGISTER_JOB_SEEKER_URL = "/auth/register/job-seeker";
+const REGISTER_JOB_SEEKER_URL = "/auth/register/job-seeker/basic";
 const REGISTER_EMPLOYER_URL = "/auth/register/employer";
 const REQUEST_VERIFY_EMAIL_URL = "/auth/verify-email/request";
 
@@ -128,6 +128,8 @@ export default function UserInfoForm({
       password: data.password,
       full_name: data.full_name.trim(),
     };
+
+    
 
     try {
       const url = recruiter ? REGISTER_EMPLOYER_URL : REGISTER_JOB_SEEKER_URL;
@@ -326,7 +328,7 @@ export default function UserInfoForm({
                   Creating Account
                 </>
               ) : (
-                "Create Account"
+                "Continue"
               )
             }
           />
