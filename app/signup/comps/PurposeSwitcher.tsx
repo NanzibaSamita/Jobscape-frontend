@@ -114,8 +114,7 @@ export default function PurposeSwitcher() {
 
     if (!disableLoading) setCvJSONLoad(true);
 
-    axiosInstance
-      .get(`${PROFILE_CHECK_API}${query ? "?" + query : ""}`, {
+axiosInstance.get(`${PROFILE_CHECK_API}${query ? "?" + query : ""}`, {
         signal: new AbortController().signal,
       })
       .then((res) => {
