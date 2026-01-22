@@ -6,6 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useRouter } from "next/navigation";
+
 import {
   Form,
   FormControl,
@@ -72,6 +74,7 @@ export default function UserInfoForm({
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const router = useRouter();
 
   const form = useForm<UserInfoValues>({
     resolver: zodResolver(userInfoSchema),
@@ -98,18 +101,17 @@ export default function UserInfoForm({
 
       const res = await axiosInstance.post(url, payload);
 
-      const tempToken = res.data?.temp_token;
-      const userId = res.data?.user_id;
+      // ✅ Backend now sends verification email immediately
+      const msg =
+        res.data?.message || "Account created. Please verify your email to continue.";
+      toast.success(msg);
 
-      // clear old tokens (testing safety)
-      localStorage.removeItem("jobseeker_temp_token");
-      localStorage.removeItem("jobseeker_user_id");
+      // ✅ Send to waiting screen (resend available there)
+      router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
 
-      if (tempToken) localStorage.setItem("jobseeker_temp_token", tempToken);
-      if (userId) localStorage.setItem("jobseeker_user_id", userId);
-
-      toast.success("Step 1 complete. Please upload your CV to continue.");
-      onComplete(); // move to upload step
+      // ✅ No more "upload step" here; keep callback safe for old UI
+      // (PurposeSwitcher may still pass a noop; this won't break anything)
+      onComplete?.();
     } catch (err: any) {
       const status = err?.response?.status;
       const detail =
@@ -118,10 +120,17 @@ export default function UserInfoForm({
         "An error occurred while creating the account.";
 
       if (status === 400) {
-        form.setError("email", {
-          type: "manual",
-          message: detail || "Email already registered",
-        });
+        // If backend returns "already registered but not verified", still route to verify screen
+        const maybeMsg = String(detail || "");
+        if (maybeMsg.toLowerCase().includes("not verified")) {
+          toast.info(maybeMsg);
+          router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
+        } else {
+          form.setError("email", {
+            type: "manual",
+            message: detail || "Email already registered",
+          });
+        }
       } else {
         toast.error(detail);
       }
