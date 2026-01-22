@@ -1,5 +1,5 @@
 "use client";
-import { Menu } from "lucide-react";
+import Link from "next/link";
 
 function getInitials(name: string) {
   const parts = name.trim().split(" ");
@@ -11,11 +11,9 @@ function getInitials(name: string) {
 export default function Header({
   name,
   location,
-  onToggleSidebar,
 }: {
   name: string;
   location?: string | null;
-  onToggleSidebar: () => void;
 }) {
   return (
     <div className="bg-gradient-to-r from-purple-100 to-purple-50 px-5 py-4 rounded-xl flex justify-between items-center">
@@ -31,10 +29,7 @@ export default function Header({
 
           {/* Badges */}
           <div className="flex gap-2 mt-1 flex-wrap">
-            <span
-              className="bg-violet-900 text-white px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1
-"
-            >
+            <span className="bg-violet-900 text-white px-2 py-0.5 rounded-full text-xs font-medium">
               Job Seeker
             </span>
 
@@ -47,15 +42,12 @@ export default function Header({
         </div>
       </div>
 
-      {/* Sidebar toggle */}
-      <button
-        type="button"
-        onClick={onToggleSidebar}
-        className="p-1.5 rounded-md hover:bg-purple-200 transition"
-        aria-label="Toggle sidebar"
-      >
-        <Menu size={16} />
-      </button>
+      {/* Edit button (right side) */}
+      <Link href="/jobseeker/profile/edit">
+        <button className="bg-white border border-purple-200 px-4 py-1.5 rounded-full text-xs font-semibold hover:bg-purple-50 transition">
+          Edit
+        </button>
+      </Link>
     </div>
   );
 }
