@@ -14,7 +14,9 @@ const SECTOR_API_ENDPOINT = "/api/v1/sector-select";
 export default function PurposeSwitcher() {
   const router = useRouter();
 
-  const [userType, setUserType] = useState<"job-seeker" | "hiring">("job-seeker");
+  const [userType, setUserType] = useState<"job-seeker" | "hiring">(
+    "job-seeker",
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   const [countries, setCountries] = useState<any[]>([]);
@@ -41,7 +43,9 @@ export default function PurposeSwitcher() {
   }, [userType]);
 
   const heading =
-    userType === "job-seeker" ? "Create a new account" : "Welcome! Let’s get started";
+    userType === "job-seeker"
+      ? "Create a new account"
+      : "Welcome! Let’s get started";
 
   const subText =
     userType === "job-seeker"

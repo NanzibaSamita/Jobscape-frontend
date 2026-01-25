@@ -4,7 +4,6 @@ import { Menu } from "lucide-react";
 
 import { jobSeeker } from "../data"; // uses view dummy data for now
 import ProfileEditHeader from "./ProfileEditHeader";
-import SummaryForm from "./SummaryForm";
 import SkillsForm from "./SkillsForm";
 import EducationForm from "./EducationForm";
 import ExperienceForm from "./ExperienceForm";

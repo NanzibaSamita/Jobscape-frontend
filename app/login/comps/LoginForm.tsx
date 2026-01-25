@@ -27,7 +27,7 @@ import { useAppDispatch } from "@/lib/store";
 import { loginUser } from "@/lib/store/slices/authSlice";
 import { REDIRECT_URLS } from "@/local/redirectDatas";
 
-// ✅ Your backend route
+//  Your backend route
 const LOGIN_URL = "/auth/login";
 
 const formSchema = z.object({
@@ -53,7 +53,7 @@ export default function LoginForm() {
     defaultValues: { email: "", password: "", rememberMe: false },
   });
 
-  // ✅ Store token based on rememberMe
+  // Store token based on rememberMe
   const persistToken = (token: string, remember: boolean) => {
     try {
       const storage = remember ? localStorage : sessionStorage;
@@ -63,38 +63,32 @@ export default function LoginForm() {
     }
   };
 
-  // ✅ Normalize user shape from FastAPI /auth/me
   const handleLogin = async (user: any, token: string, remember: boolean) => {
-    // Your backend likely returns:
-    // { id, email, role, is_active, is_email_verified, ... }
     const roleWeight = user?.role || "base";
 
     dispatch(loginUser({ user, token, roleWeight }));
 
-    // If you still want to use cookies-based loginAction, store what you actually have.
-    // NOTE: your old fields (user_name, roles) probably don't exist.
-    await loginAction(
-      user.id,
-      user.email, // store email as name fallback
-      token,
-      null,
-      roleWeight
-    );
+    await loginAction(user.id, user.email, token, null, roleWeight);
+
+    //redirecting
 
     persistToken(token, remember);
 
-    if (redirectTo && redirectTo !== "/") return router.push(redirectTo);
+    const target =
+      redirectTo && redirectTo !== "/"
+        ? redirectTo
+        : roleWeight === "hiring"
+          ? "/profile"
+          : "/jobseeker/profile";
 
-    // If REDIRECT_URLS expects keys like "job_seeker"/"employer"/"base"
-    const key = (roleWeight ?? "base").toString();
-    router.push(REDIRECT_URLS[key] ?? REDIRECT_URLS["base"]);
+    router.push(target);
   };
 
   const handelContinue = async (data: FormValues) => {
     setLoading(true);
 
     try {
-      // ✅ OAuth2PasswordRequestForm expects urlencoded username/password
+      //  OAuth2PasswordRequestForm expects urlencoded username/password
       const body = new URLSearchParams();
       body.append("username", data.email);
       body.append("password", data.password);
@@ -109,7 +103,7 @@ export default function LoginForm() {
         return;
       }
 
-      // ✅ Fetch user profile
+      //  Fetch user profile
       const meRes = await axiosInstance.get("/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -155,7 +149,10 @@ export default function LoginForm() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handelContinue)} className="space-y-3">
+          <form
+            onSubmit={form.handleSubmit(handelContinue)}
+            className="space-y-3"
+          >
             <FormField
               control={form.control}
               name="email"

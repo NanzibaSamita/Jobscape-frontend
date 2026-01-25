@@ -2,40 +2,82 @@ import { NextRequest, NextResponse } from "next/server";
 import routes from "./data/protectedRoutes";
 import { REDIRECT_URLS } from "./local/redirectDatas";
 
+const PUBLIC = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+];
 
+// ✅ normalize role formats: "JOB_SEEKER", "job_seeker", "job-seeker" → "job-seeker"
+const normalizeRole = (role: unknown) => {
+  const r = String(role ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (["job_seeker", "job-seeker", "jobseeker", "job seeker"].includes(r)) {
+    return "job-seeker";
+  }
+  if (["hiring", "recruiter", "employer"].includes(r)) {
+    return "hiring";
+  }
+  if (!r) return "base";
+
+  return r; // fallback: keep whatever it is but lowercased
+};
 
 export function middleware(request: NextRequest) {
-    // Get the session cookie
-    const session = request.cookies.get("session")
-    const { pathname } = request.nextUrl
+  const session = request.cookies.get("session");
+  const { pathname } = request.nextUrl;
 
-    // Check if the current route is protected
-    const isProtectedRoute = routes.some((each) => pathname.startsWith(each.route));
-    const access = routes.find((each) => each.route === pathname);
+  // ✅ Always allow public routes
+  if (PUBLIC.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    return NextResponse.next();
+  }
 
-    // If accessing a protected route without a session, redirect to login
-    // console.log({ session, isProtectedRoute, pathname })
-    if (isProtectedRoute && !session) {
-        const loginUrl = new URL("/login", request.url)
-        return NextResponse.redirect(loginUrl)
+  // ✅ No session + protected route => go login
+  const isProtectedRoute = routes.some((each) =>
+    pathname.startsWith(each.route),
+  );
+  if (isProtectedRoute && !session) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  // ✅ Read role safely once
+  let userRole = "base";
+  if (session) {
+    try {
+      const parsed = JSON.parse(session.value);
+      userRole = normalizeRole(parsed?.roleWeight);
+    } catch {
+      // malformed cookie => treat as logged out
+      return NextResponse.redirect(new URL("/login", request.url));
     }
+  }
 
-    if (access && !access.authOnly) {
-        const userRole = String(JSON.parse(session?.value ?? "").roleWeight) ?? '';
-        if (!access.availableFor.includes(userRole)) return NextResponse.redirect(new URL("/404", request.url));
+  // 1) If logged in and hitting login, go to dashboard/role home
+  if (session && pathname === "/login") {
+    const redirectPath =
+      REDIRECT_URLS[userRole] || REDIRECT_URLS["base"] || "/";
+
+    return NextResponse.redirect(new URL(redirectPath, request.url));
+  }
+
+  // 2) Role-based access control (use startsWith, and normalize availableFor too)
+  const access = routes.find((each) => pathname.startsWith(each.route));
+  if (access && session) {
+    const allowed = (access.availableFor || []).map(normalizeRole);
+
+    if (!allowed.includes(userRole)) {
+      return NextResponse.redirect(new URL("/", request.url));
     }
+  }
 
-    // If logged in and trying to access login page, redirect to dashboard
-    if (session && pathname === "/login") {
-        const userRole = String(JSON.parse(session?.value ?? "")?.roleWeight) ?? '';
-        const dashboardUrl = new URL(REDIRECT_URLS[userRole] ?? "/dashboard", request.url);
-        return NextResponse.redirect(dashboardUrl)
-    }
-
-    // Allow the request to continue
-    return NextResponse.next()
+  return NextResponse.next();
 }
 
 export const config = {
-    matcher: ['/dashboard/:path*', '/jobs', '/login'],
+  // ✅ exclude static + api + images folder
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|images).*)"],
 };
