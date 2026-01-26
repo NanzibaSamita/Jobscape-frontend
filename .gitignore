@@ -39,4 +39,6 @@ next-env.d.ts
 #Python
 
 AllFiles.py
+all_files.py
 frontend_with_code.txt
+code_dump.txt

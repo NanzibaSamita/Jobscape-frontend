@@ -30,6 +30,8 @@ import { REDIRECT_URLS } from "@/local/redirectDatas";
 // ✅ Your backend route
 const LOGIN_URL = "/auth/login";
 
+
+
 const formSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address." }),
   password: z.string().min(1, { message: "Password is required." }),
@@ -65,37 +67,45 @@ export default function LoginForm() {
 
   // ✅ Normalize user shape from FastAPI /auth/me
   const handleLogin = async (user: any, token: string, remember: boolean) => {
-  const role = (user?.role || "base").toString();
+    console.log("🔵 handleLogin called");
+    console.log("🔵 user:", user);
+    console.log("🔵 role:", user?.role);
+    
+    const role = user?.role; 
+    
+    // Dispatch to Redux store
+    dispatch(loginUser({ user, token, roleWeight: role }));
+    console.log("🔵 Redux dispatch done");
+    
+    // Set server-side cookies
+    await loginAction(user.id, user.email, token, null, role);
+    console.log("🔵 Server cookies set");
+    
+    // Persist token client-side
+    persistToken(token, remember);
+    console.log("🔵 Token persisted");
 
-  dispatch(loginUser({ user, token, roleWeight: role }));
+    // Handle redirects - ONLY if explicitly set
+    if (redirectTo && redirectTo !== "/" && redirectTo !== "!") {
+      console.log("🔵 Redirecting to:", redirectTo);
+      return router.push(redirectTo);
+    }
+    
+    // Route based on role
+    if (role === "JOB_SEEKER") {
+      console.log("🔵 Redirecting to /jobseeker/profile");
+      return router.push("/jobseeker/profile");
+    }
+    
+    if (role === "EMPLOYER") {
+      console.log("🔵 Redirecting to /employer/dashboard");
+      return router.push("/employer/dashboard");
+    }
+    
+    console.log("🔵 Redirecting to /");
+    return router.push("/");
+  };
 
-  await loginAction(
-    user.id,
-    user.email, // fallback name
-    token,
-    null,
-    role
-  );
-
-  persistToken(token, remember);
-
-  // ✅ If login page had ?redirect=..., respect it
-  if (redirectTo && redirectTo !== "/") {
-    return router.push(redirectTo);
-  }
-
-  // ✅ Your requested behavior
-  if (role === "JOB_SEEKER") {
-    return router.push("/jobseeker/profile");
-  }
-
-  // employer/admin routing
-  if (role === "EMPLOYER") {
-    return router.push("/employer/dashboard");
-  }
-
-  return router.push("/");
-};
 
 
   const handelContinue = async (data: FormValues) => {
