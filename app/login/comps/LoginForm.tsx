@@ -65,30 +65,38 @@ export default function LoginForm() {
 
   // ✅ Normalize user shape from FastAPI /auth/me
   const handleLogin = async (user: any, token: string, remember: boolean) => {
-    // Your backend likely returns:
-    // { id, email, role, is_active, is_email_verified, ... }
-    const roleWeight = user?.role || "base";
+  const role = (user?.role || "base").toString();
 
-    dispatch(loginUser({ user, token, roleWeight }));
+  dispatch(loginUser({ user, token, roleWeight: role }));
 
-    // If you still want to use cookies-based loginAction, store what you actually have.
-    // NOTE: your old fields (user_name, roles) probably don't exist.
-    await loginAction(
-      user.id,
-      user.email, // store email as name fallback
-      token,
-      null,
-      roleWeight
-    );
+  await loginAction(
+    user.id,
+    user.email, // fallback name
+    token,
+    null,
+    role
+  );
 
-    persistToken(token, remember);
+  persistToken(token, remember);
 
-    if (redirectTo && redirectTo !== "/") return router.push(redirectTo);
+  // ✅ If login page had ?redirect=..., respect it
+  if (redirectTo && redirectTo !== "/") {
+    return router.push(redirectTo);
+  }
 
-    // If REDIRECT_URLS expects keys like "job_seeker"/"employer"/"base"
-    const key = (roleWeight ?? "base").toString();
-    router.push(REDIRECT_URLS[key] ?? REDIRECT_URLS["base"]);
-  };
+  // ✅ Your requested behavior
+  if (role === "JOB_SEEKER") {
+    return router.push("/jobseeker/profile");
+  }
+
+  // employer/admin routing
+  if (role === "EMPLOYER") {
+    return router.push("/employer/dashboard");
+  }
+
+  return router.push("/");
+};
+
 
   const handelContinue = async (data: FormValues) => {
     setLoading(true);
