@@ -11,6 +11,10 @@ import { Inputs } from "./Inputs";
 const COUNTRY_API_ENDPOINT = "/api/v1/country-select";
 const SECTOR_API_ENDPOINT = "/api/v1/sector-select";
 
+import Link from "next/link";
+
+
+
 export default function PurposeSwitcher() {
   const router = useRouter();
 
@@ -110,12 +114,17 @@ export default function PurposeSwitcher() {
 
           <p className="text-sm text-center">
             Already have an account?{" "}
-            <span
+            {/* <span
               className="text-purple-600 cursor-pointer"
               onClick={() => router.push("/login")}
             >
               Sign in
-            </span>
+            </span> */}
+
+            <Link href="/login" className="text-purple-600 cursor-pointer">
+  Sign in
+</Link>
+
           </p>
         </div>
       </div>

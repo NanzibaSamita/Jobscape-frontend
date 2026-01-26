@@ -4,6 +4,7 @@ import { REDIRECT_URLS } from "./local/redirectDatas";
 
 
 
+
 export function middleware(request: NextRequest) {
     // Get the session cookie
     const session = request.cookies.get("session")
