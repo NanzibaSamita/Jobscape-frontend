@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -48,61 +48,114 @@ export default function LoginForm() {
   const router = useRouter();
   const dispatch = useAppDispatch();
 
+  // ✅ ADD THIS: Redirect if already logged in with VALID token
+  useEffect(() => {
+    async function checkAuth() {
+      const token = localStorage.getItem("access_token");
+      const role = localStorage.getItem("user_role");
+      
+      if (token && role) {
+        // ✅ Verify token is valid by calling /auth/me
+        try {
+          await axiosInstance.get("/auth/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          // ✅ Token is valid, redirect to dashboard
+          const dashboardUrl = role === "EMPLOYER" 
+            ? "/employer/profile" 
+            : role === "JOBSEEKER" || role === "JOB_SEEKER"
+            ? "/jobseeker/profile"
+            : "/";
+          
+          window.location.href = dashboardUrl;
+        } catch (error) {
+          // ✅ Token is invalid, clear it
+          console.log("Invalid token, clearing storage");
+          localStorage.clear();
+          sessionStorage.clear();
+        }
+      }
+    }
+
+    checkAuth();
+  }, []);
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { email: "", password: "", rememberMe: false },
   });
 
-  // ✅ Store token based on rememberMe
-  const persistToken = (token: string, remember: boolean) => {
-    try {
-      const storage = remember ? localStorage : sessionStorage;
-      storage.setItem("access_token", token);
-    } catch {
-      // ignore
-    }
-  };
-
   // ✅ Normalize user shape from FastAPI /auth/me
   const handleLogin = async (user: any, token: string, remember: boolean) => {
-  const role = (user?.role || "base").toString();
+    console.log("🔵 handleLogin called");
+    console.log("user:", user);
+    console.log("role:", user?.role);
 
-  dispatch(loginUser({ user, token, roleWeight: role }));
+    const role = user?.role;
 
-  await loginAction(
-    user.id,
-    user.email, // fallback name
-    token,
-    null,
-    role
-  );
+    // ✅ Store in localStorage (simple approach)
+    localStorage.setItem("access_token", token);
+    localStorage.setItem("user_id", user.id);
+    localStorage.setItem("user_email", user.email);
+    localStorage.setItem("user_role", role);
 
-  persistToken(token, remember);
+    // ✅ Set server-side cookies
+    await loginAction(user.id, user.email, token, null, role);
 
-  // ✅ If login page had ?redirect=..., respect it
-  if (redirectTo && redirectTo !== "/") {
-    return router.push(redirectTo);
-  }
+    // ✅ Handle redirects based on role
+    if (redirectTo && redirectTo !== "" && redirectTo !== "null") {
+      console.log("Redirecting to:", redirectTo);
+      return window.location.href = redirectTo;
+    }
 
-  // ✅ Your requested behavior
-  if (role === "JOB_SEEKER") {
-    return router.push("/jobseeker/profile");
-  }
+    // ✅ Route based on role - CHECK PROFILE COMPLETION
+    if (role === "EMPLOYER") {
+      try {
+        // Check if employer profile is completed
+        const profileRes = await axiosInstance.get("/employer/profile/me");
+        
+        if (!profileRes.data.profile_completed) {
+          console.log("Employer profile incomplete, redirecting to complete registration");
+          return window.location.href = "/employer/register/complete";
+        } else {
+          console.log("Employer profile complete, redirecting to profile page");
+          return window.location.href = "/employer/profile";
+        }
+      } catch (err) {
+        console.error("Failed to fetch employer profile:", err);
+        return window.location.href = "/employer/register/complete";
+      }
+    }
 
-  // employer/admin routing
-  if (role === "EMPLOYER") {
-    return router.push("/employer/dashboard");
-  }
+    if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
+      try {
+        // Check if job seeker profile is completed
+        const profileRes = await axiosInstance.get("/jobseeker/profile");
+        
+        if (!profileRes.data.profile_completed) {
+          console.log("Job seeker profile incomplete, redirecting to CV upload");
+          return window.location.href = "/cv-upload";
+        } else {
+          console.log("Job seeker profile complete, redirecting to profile");
+          return window.location.href = "/jobseeker/profile";
+        }
+      } catch (err) {
+        console.error("Failed to fetch job seeker profile:", err);
+        return window.location.href = "/jobseeker/profile";
+      }
+    }
 
-  return router.push("/");
-};
-
+    // Fallback
+    console.log("Redirecting to /");
+    return window.location.href = "/";
+  };
 
   const handelContinue = async (data: FormValues) => {
     setLoading(true);
 
     try {
-      // ✅ OAuth2PasswordRequestForm expects urlencoded username/password
+      // OAuth2PasswordRequestForm expects urlencoded username/password
       const body = new URLSearchParams();
       body.append("username", data.email);
       body.append("password", data.password);
@@ -112,17 +165,20 @@ export default function LoginForm() {
       });
 
       const token = loginRes?.data?.access_token;
+
       if (!token) {
         toast.error("Login failed: missing access token from server.");
         return;
       }
 
-      // ✅ Fetch user profile
+      // Fetch user profile
       const meRes = await axiosInstance.get("/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      // ✅ Call handleLogin with user data
       await handleLogin(meRes.data, token, !!data.rememberMe);
+
     } catch (err: any) {
       const axErr = err as AxiosError<any>;
       const detail =
@@ -133,11 +189,10 @@ export default function LoginForm() {
       // Optional routing based on message
       if (typeof detail === "string") {
         const d = detail.toLowerCase();
-
         if (d.includes("verify your email")) {
           router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
-        } else if (d.includes("upload") && d.includes("cv")) {
-          router.push("/signup"); // or your “upload-cv” step page
+        } else if (d.includes("upload") || d.includes("cv")) {
+          router.push("/signup");
         }
       }
 

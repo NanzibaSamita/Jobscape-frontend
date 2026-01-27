@@ -1,53 +1,78 @@
 "use client";
-import Link from "next/link";
 
-function getInitials(name: string) {
-  const parts = name.trim().split(" ");
-  const first = parts[0]?.[0] ?? "G";
-  const last = parts[parts.length - 1]?.[0] ?? "U";
-  return (first + last).toUpperCase();
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { LogOut, Edit, MapPin } from "lucide-react";
+import { toast } from "react-toastify";
+
+interface HeaderProps {
+  name: string;
+  location?: string;
 }
 
-export default function Header({
-  name,
-  location,
-}: {
-  name: string;
-  location?: string | null;
-}) {
+export default function Header({ name, location }: HeaderProps) {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    // Clear all authentication data
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Also clear cookies if you're using them
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    
+    // Show success message
+    toast.success("Logged out successfully");
+    
+    // Redirect to login page
+    router.push("/login");
+  };
+
+  const handleEditProfile = () => {
+    router.push("/jobseeker/profile/edit");
+  };
+
   return (
-    <div className="bg-gradient-to-r from-purple-100 to-purple-50 px-5 py-4 rounded-xl flex justify-between items-center">
-      <div className="flex items-center gap-3">
-        {/* Avatar */}
-        <div className="w-12 h-12 rounded-full bg-black text-white flex items-center justify-center text-sm font-bold border-2 border-white">
-          {getInitials(name)}
+    <div className="bg-white rounded-xl p-6 shadow-sm">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{name}</h1>
+          {location && (
+            <div className="flex items-center gap-1 mt-2 text-gray-600">
+              <MapPin className="h-4 w-4" />
+              <span className="text-sm">{location}</span>
+            </div>
+          )}
         </div>
 
-        <div>
-          {/* Name */}
-          <h1 className="text-sm font-semibold leading-tight">{name}</h1>
+        <div className="flex gap-2">
+          {/* Edit Profile Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleEditProfile}
+            className="flex items-center gap-2"
+          >
+            <Edit className="h-4 w-4" />
+            Edit Profile
+          </Button>
 
-          {/* Badges */}
-          <div className="flex gap-2 mt-1 flex-wrap">
-            <span className="bg-violet-900 text-white px-2 py-0.5 rounded-full text-xs font-medium">
-              Job Seeker
-            </span>
-
-            {location && (
-              <span className="border border-purple-200 bg-white px-2 py-0.5 rounded-full text-xs font-medium">
-                {location}
-              </span>
-            )}
-          </div>
+          {/* Logout Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
         </div>
       </div>
-
-      {/* Edit button (right side) */}
-      <Link href="/jobseeker/profile/edit">
-        <button className="bg-white border border-purple-200 px-4 py-1.5 rounded-full text-xs font-semibold hover:bg-purple-50 transition">
-          Edit
-        </button>
-      </Link>
     </div>
   );
 }

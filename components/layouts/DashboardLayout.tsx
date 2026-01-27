@@ -225,7 +225,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                             </nav>
                             <div>
                                 <p className="text-xs text-gray-500 mt-4">
-                                    © {new Date().getFullYear()} WANTED.AI. All rights reserved.
+                                    © {new Date().getFullYear()} JobScape. All rights reserved.
                                 </p>
                             </div>
                         </div>
