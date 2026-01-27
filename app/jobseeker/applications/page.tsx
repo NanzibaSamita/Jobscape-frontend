@@ -37,7 +37,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function MyApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all"); // ✅ Changed default to "all"
 
   useEffect(() => {
     fetchApplications();
@@ -46,7 +46,8 @@ export default function MyApplicationsPage() {
   async function fetchApplications() {
     try {
       setLoading(true);
-      const data = await getMyApplications(statusFilter || undefined);
+      // ✅ Only pass filter if it's not "all"
+      const data = await getMyApplications(statusFilter === "all" ? undefined : statusFilter);
       setApplications(data);
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || "Failed to load applications");
@@ -92,7 +93,8 @@ export default function MyApplicationsPage() {
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Applications</SelectItem>
+                {/* ✅ Changed from "" to "all" */}
+                <SelectItem value="all">All Applications</SelectItem>
                 <SelectItem value="PENDING">Pending</SelectItem>
                 <SelectItem value="REVIEWED">Reviewed</SelectItem>
                 <SelectItem value="SHORTLISTED">Shortlisted</SelectItem>

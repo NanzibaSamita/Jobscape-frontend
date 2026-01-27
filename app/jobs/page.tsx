@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, MapPin, Briefcase, Clock, DollarSign, Search } from "lucide-react";
-import Link from "next/link"; // ✅ CORRECT (with slash)
+import Link from "next/link";
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
