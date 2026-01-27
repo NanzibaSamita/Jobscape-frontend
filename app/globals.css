@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 @import "react-quill/dist/quill.snow.css";
 
 @layer utilities {
@@ -13,14 +14,15 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
+
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
     --primary: 262 83% 58%;
-    --primary-foreground: 0 0% 0%;
-    /* black for best contrast on yellow */
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 45 100% 96%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -35,7 +37,7 @@
     --destructive-foreground: 210 40% 98%;
 
     --border: 45 30% 90%;
-    /* --input: 45 30% 90%; */
+    --input: 214 28% 85%;
     --ring: 262 83% 58%;
 
     --radius: 0.65rem;
@@ -45,12 +47,12 @@
     --chart-3: 55 100% 60%;
     --chart-4: 25 100% 45%;
     --chart-5: 10 90% 50%;
+
     --label: 217 14% 51%;
     --label-foreground: 217 14% 51%;
-    --input: 214 28% 85%;
-    --input-foreground: 214 28% 85%;
+
     --dash: 220 14% 95%;
-    --dash-foreground: 0 0% 100%;
+    --dash-foreground: 222.2 84% 4.9%;
   }
 
   .dark {
@@ -64,9 +66,7 @@
     --popover-foreground: 45 100% 90%;
 
     --primary: 45 100% 60%;
-    /* slightly brighter for dark */
     --primary-foreground: 0 0% 10%;
-    /* nearly black text */
 
     --secondary: 240 5% 20%;
     --secondary-foreground: 45 100% 90%;
@@ -81,7 +81,7 @@
     --destructive-foreground: 210 40% 98%;
 
     --border: 240 5% 20%;
-    /* --input: 240 5% 20%; */
+    --input: 240 5% 20%;
     --ring: 45 100% 60%;
 
     --chart-1: 45 100% 60%;
@@ -89,16 +89,14 @@
     --chart-3: 55 100% 65%;
     --chart-4: 25 100% 50%;
     --chart-5: 10 90% 55%;
+
     --label: 217 14% 51%;
     --label-foreground: 217 14% 51%;
-    --input: 214 28% 85%;
-    --input-foreground: 214 28% 85%;
-    --dash: 0 0% 0%;
-    --dash-foreground: 240 5% 10%;
-  }
-}
 
-@layer base {
+    --dash: 0 0% 0%;
+    --dash-foreground: 45 100% 90%;
+  }
+
   * {
     @apply border-border;
   }
@@ -108,14 +106,17 @@
   }
 }
 
+/* Optional app backgrounds (use on wrappers, NOT on <body>) */
 .app-background {
   @apply bg-gradient-to-br from-blue-800 via-slate-900 to-slate-900 text-white;
 }
 
+/* If you use this in light mode, remove text-white or it will fight text-foreground */
 .app-background_light {
-  @apply bg-gradient-to-br from-blue-500/50 via-blue-700/90 to-blue-900/100 text-white;
+  @apply bg-gradient-to-br from-blue-500/50 via-blue-700/90 to-blue-900/100;
 }
 
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   height: 8px;
   width: 3px;
@@ -127,14 +128,12 @@
   border-radius: 13px;
 }
 
-/* Handle */
 ::-webkit-scrollbar-thumb {
   background-color: #10172a;
   width: 3px;
   border-radius: 13px;
 }
 
-/* Handle on hover */
 ::-webkit-scrollbar-thumb:hover {
   background-color: #10172a;
 }
@@ -186,7 +185,6 @@
   .container-padding-sm {
     padding-left: 1.69rem;
     padding-right: 1.69rem;
-    /* Tailwind's gray-200 */
   }
 }
 
@@ -199,7 +197,6 @@
   .container-padding-sm {
     padding-left: 3.69rem;
     padding-right: 3.69rem;
-    /* Tailwind's gray-200 */
   }
 }
 
@@ -212,7 +209,6 @@
   .container-padding-sm {
     padding-left: 10rem;
     padding-right: 10rem;
-    /* Tailwind's gray-200 */
   }
 }
 
@@ -223,6 +219,7 @@
   }
 }
 
+/* Font */
 @font-face {
   font-family: "Mona Sans";
   src: url("/fonts/mona-sans/MonaSans-Regular.woff2") format("woff2"),
@@ -232,6 +229,7 @@
   font-display: swap;
 }
 
+/* Masks */
 .blur-mask {
   -webkit-mask-image: radial-gradient(
     circle at center,
@@ -262,6 +260,7 @@
   mask-size: 100% 100%;
 }
 
+/* Hide scrollbar */
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -271,6 +270,7 @@
   display: none;
 }
 
+/* Remove number input spinners */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;

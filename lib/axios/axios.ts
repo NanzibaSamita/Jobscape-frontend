@@ -1,106 +1,53 @@
-'use client'
-import axios from 'axios';
-import { extractAIResponseFromText } from '../utils';
-import { logoutAction } from '../cookies';
+import axios from "axios";
 
-const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL,
+export const axiosInstance = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL, // e.g. http://localhost:8000
+  withCredentials: true,
 });
 
-api.interceptors.request.use((config) => {
-    try {
-        const root = localStorage.getItem('persist:root');
-        if (root) {
-            const user = JSON.parse(root)?.auth;
+axiosInstance.interceptors.request.use((config) => {
+  config.headers = config.headers ?? {};
 
-            const token = JSON.parse(user)?.token;
+  const isFormData =
+    typeof FormData !== "undefined" && config.data instanceof FormData;
 
-            if (token) {
-                config.headers.Authorization = `Bearer ${token}`;
-            } else {
-                throw Error("Error parsing")
-            }
-        }
-    }
-    catch (err) {
-        handleTokenExpiration();
-        console.error("Error accessing localStorage or parsing token:", err);
-        throw Error("Error Accessing Storge");
-    }
+  const isUrlEncoded =
+    typeof URLSearchParams !== "undefined" &&
+    config.data instanceof URLSearchParams;
+
+  // ✅ If request is FormData, NEVER set Content-Type (axios will add boundary)
+  if (isFormData) {
+    delete (config.headers as any)["Content-Type"];
+    delete (config.headers as any)["content-type"];
     return config;
-}, (error) => {
-    return Promise.reject(error);
+  }
+
+  // ✅ If request is x-www-form-urlencoded (OAuth2 login), keep/set it
+  if (isUrlEncoded) {
+    (config.headers as any)["Content-Type"] = "application/x-www-form-urlencoded";
+    return config;
+  }
+
+  // ✅ If caller already set Content-Type, don't override
+  const existing =
+    (config.headers as any)["Content-Type"] || (config.headers as any)["content-type"];
+  if (existing) return config;
+
+  // ✅ Default JSON requests
+  (config.headers as any)["Content-Type"] = "application/json";
+  return config;
 });
 
-api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-            console.log("Token expired");
-            handleTokenExpiration();
-        }
-        return Promise.reject(error);
-    }
+// ✅ Response interceptor: single logger
+axiosInstance.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    console.error("API Error:", {
+      url: err?.config?.url,
+      method: err?.config?.method,
+      status: err?.response?.status,
+      data: err?.response?.data,
+    });
+    return Promise.reject(err);
+  }
 );
-
-
-const handleTokenExpiration = () => {
-    try {
-        localStorage.removeItem('persist:root');
-        logoutAction();
-        console.log("Token removed successfully");
-    } catch (e) {
-        console.log("Error Removing Token. reason", e);
-    } finally {
-
-    }
-};
-
-const axiosInstance = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL
-    , // Replace with your API URL
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
-
-async function aiBOT(message: string) {
-    try {
-        const response = await axios.post(process.env.NEXT_PUBLIC_BOT_API_URL || "", {
-            model: "deepseek-chat",
-            messages: [
-                {
-                    role: "user",
-                    content: message,
-                },
-            ],
-        },
-            {
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${process.env.NEXT_PUBLIC_BOT_TOKEN}`,
-                },
-            }
-        );
-
-        const content = response.data.choices[0].message.content;
-
-        try {
-            const response = extractAIResponseFromText(content); // Convert stringified JSON to JS object
-            console.log("AI BOT response:", response);
-            return response;
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (e) {
-            throw new Error("Invalid JSON response: " + content);
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-        const msg =
-            error?.response?.data?.error?.message ||
-            error?.message ||
-            "Unknown error from DeepSeek API";
-        throw new Error(`DeepSeek API error: ${msg}`);
-    }
-}
-
-export { api, axiosInstance, aiBOT };
