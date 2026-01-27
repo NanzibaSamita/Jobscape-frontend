@@ -1,7 +1,8 @@
 import axios from "axios";
 
 export const axiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL, // e.g. http://localhost:8000
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+  timeout: 30000, // 30 seconds
   withCredentials: true,
 });
 
@@ -68,21 +69,34 @@ axiosInstance.interceptors.response.use(
     // If 401 Unauthorized, clear tokens and redirect to login
     if (err?.response?.status === 401) {
       console.warn("⚠️ Token expired or invalid. Redirecting to login...");
-      
+
       // Clear tokens
       localStorage.removeItem("access_token");
       sessionStorage.removeItem("access_token");
 
       // Redirect to login (only on client-side)
       if (typeof window !== "undefined") {
-        // Preserve current URL for redirect after login
         const currentPath = window.location.pathname;
-        const redirectParam =
-          currentPath !== "/login" && currentPath !== "/"
-            ? `?redirect=${encodeURIComponent(currentPath)}`
-            : "";
-        
-        window.location.href = `/login${redirectParam}`;
+
+        // ✅ FIX: Prevent infinite redirect loop
+        // Don't redirect if already on auth pages
+        const isAuthPage =
+          currentPath.includes("/login") ||
+          currentPath.includes("/register") ||
+          currentPath.includes("/signup") ||
+          currentPath.includes("/verify-email") ||
+          currentPath.includes("/forgot-password") ||
+          currentPath.includes("/reset-password");
+
+        if (!isAuthPage) {
+          // Preserve current URL for redirect after login
+          const redirectParam =
+            currentPath !== "/"
+              ? `?redirect=${encodeURIComponent(currentPath)}`
+              : "";
+
+          window.location.href = `/login${redirectParam}`;
+        }
       }
     }
     // ===============================================
@@ -90,3 +104,5 @@ axiosInstance.interceptors.response.use(
     return Promise.reject(err);
   }
 );
+
+export default axiosInstance;

@@ -95,22 +95,12 @@ export default function PurposeSwitcher() {
           </div>
 
           {/* CONTENT */}
-          {userType === "job-seeker" ? (
-            <UserInfoForm
-              recruiter={false}
-              email=""
-              editableEmail
-              onComplete={() => {}}
-            />
-          ) : (
-            <Inputs
-              isLoading={isLoading}
-              setIsLoading={setIsLoading}
-              countries={countries}
-              sectors={sectors}
-            />
-          )}
-
+          <UserInfoForm
+            recruiter={userType === "hiring"}
+            email=""
+            editableEmail
+            onComplete={() => {}}
+          />
           {/* SIGN IN LINK - SIMPLIFIED */}
           <div className="text-sm text-center">
             Already have an account?{" "}

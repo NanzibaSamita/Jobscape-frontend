@@ -22,7 +22,7 @@ import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton";
 import { toast } from "react-toastify";
 
 const REGISTER_JOB_SEEKER_URL = "/auth/register/job-seeker/basic";
-const REGISTER_EMPLOYER_URL = "/auth/register/employer";
+const REGISTER_EMPLOYER_URL = "/employer/register";
 
 const userInfoSchema = z
   .object({

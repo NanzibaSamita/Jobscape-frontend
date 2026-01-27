@@ -10,7 +10,7 @@ export default function VerifyEmailConfirmPage() {
   const router = useRouter();
 
   const token = params.get("token");
-  const emailFromQuery = params.get("email"); // optional but helps resend UX
+  const emailFromQuery = params.get("email");
 
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Verifying your email...");
@@ -30,31 +30,48 @@ export default function VerifyEmailConfirmPage() {
       }
 
       try {
-        const res = await axiosInstance.post("/auth/verify-email/confirm", { token });
+        // ✅ Verify email
+        const res = await axiosInstance.post("/auth/verify-email/confirm", { 
+          token: token 
+        });
 
         if (cancelled) return;
 
-        // backend returns: { message, email, cv_upload_token }
         const verifiedEmail = res.data?.email ?? emailFromQuery ?? null;
         setEmail(verifiedEmail);
 
         const cvUploadToken = res.data?.cv_upload_token;
-        if (!cvUploadToken) {
-          // This means backend isn't returning it or you're hitting old backend
-          setStatus("error");
-          setMessage("Verification succeeded, but CV upload authorization token is missing. Please resend verification email.");
-          return;
-        }
-
-        // ✅ STORE TOKEN for /cv-upload
-        localStorage.setItem("cv_upload_token", cvUploadToken);
 
         setStatus("success");
-        setMessage(res.data?.message || "You are verified. Redirecting to CV upload...");
+        setMessage(res.data?.message || "Email verified successfully!");
 
-        window.setTimeout(() => {
-          router.replace("/cv-upload");
-        }, 1200);
+        // ✅ AUTO-LOGIN: Get access token after verification
+        if (!cvUploadToken) {
+          // Employer - need to login to get access_token
+          try {
+            // Use the verified email to login (we don't have password, so we need a different approach)
+            // Backend should return an access token on verification for seamless flow
+            
+            // For now, redirect to a page that will handle the token exchange
+            toast.success("Email verified! Completing your profile...");
+            
+            window.setTimeout(() => {
+              router.replace(`/employer/post-verification?email=${encodeURIComponent(verifiedEmail)}`);
+            }, 1500);
+            
+          } catch (err) {
+            console.error("Auto-login failed:", err);
+            toast.error("Please login to continue");
+            router.replace("/login");
+          }
+        } else {
+          // Job seeker
+          localStorage.setItem("cv_upload_token", cvUploadToken);
+          window.setTimeout(() => {
+            router.replace("/cv-upload");
+          }, 1500);
+        }
+
       } catch (err: any) {
         if (cancelled) return;
 
@@ -75,13 +92,15 @@ export default function VerifyEmailConfirmPage() {
 
   const resendVerification = async () => {
     if (!email) {
-      toast.error("Missing email address. Please go back to the verify-email page and resend using your email.");
+      toast.error("Missing email address. Please go back and try again.");
       return;
     }
 
     setResending(true);
     try {
-      const res = await axiosInstance.post("/auth/verify-email/request", { email });
+      const res = await axiosInstance.post("/auth/verify-email/request", { 
+        email: email 
+      });
       toast.success(res.data?.message || "Verification email sent again.");
     } catch (err: any) {
       toast.error(
@@ -108,7 +127,7 @@ export default function VerifyEmailConfirmPage() {
         <p className="text-sm text-muted-foreground">{message}</p>
 
         {status === "success" && (
-          <p className="text-xs text-muted-foreground">Redirecting to CV upload...</p>
+          <p className="text-xs text-muted-foreground">Redirecting...</p>
         )}
 
         {status === "error" && (
@@ -116,18 +135,16 @@ export default function VerifyEmailConfirmPage() {
             <button
               onClick={resendVerification}
               disabled={!canResend || resending}
-              className="w-full bg-primary text-primary-foreground py-2 rounded-md disabled:opacity-50"
+              className="w-full bg-purple-600 text-white py-2 rounded-md disabled:opacity-50 hover:bg-purple-700"
             >
               {resending ? "Sending..." : "Resend verification email"}
             </button>
 
             <button
-              onClick={() =>
-                router.push(email ? `/verify-email?email=${encodeURIComponent(email)}` : "/verify-email")
-              }
-              className="w-full border py-2 rounded-md"
+              onClick={() => router.push("/login")}
+              className="w-full border py-2 rounded-md hover:bg-gray-100"
             >
-              Back to verify page
+              Go to Login
             </button>
           </div>
         )}

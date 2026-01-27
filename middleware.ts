@@ -6,13 +6,13 @@ export function middleware(request: NextRequest) {
     const session = request.cookies.get("session");
     const { pathname } = request.nextUrl;
 
-    // ✅ Add helper to validate session
+    // ✅ Updated: Check for 'role' instead of 'roleWeight'
     function isValidSession(sessionCookie: any): boolean {
         if (!sessionCookie?.value) return false;
         try {
             const parsed = JSON.parse(sessionCookie.value);
-            // Check if session has required fields
-            return !!(parsed?.userId && parsed?.roleWeight);
+            // Check if session has required fields (use 'role' not 'roleWeight')
+            return !!(parsed?.userId && parsed?.role);
         } catch {
             return false;
         }
@@ -28,7 +28,8 @@ export function middleware(request: NextRequest) {
     }
 
     if (access && !access.authOnly && isValidSession(session)) {
-        const userRole = String(JSON.parse(session!.value).roleWeight) ?? '';
+        // ✅ Use 'role' instead of 'roleWeight'
+        const userRole = String(JSON.parse(session!.value).role) ?? '';
         if (!access.availableFor.includes(userRole)) {
             return NextResponse.redirect(new URL("/404", request.url));
         }
@@ -36,7 +37,8 @@ export function middleware(request: NextRequest) {
 
     // ✅ Only redirect from /login if session is VALID
     if (pathname === "/login" && isValidSession(session)) {
-        const userRole = String(JSON.parse(session!.value)?.roleWeight) ?? '';
+        // ✅ Use 'role' instead of 'roleWeight'
+        const userRole = String(JSON.parse(session!.value)?.role) ?? '';
         const dashboardUrl = new URL(REDIRECT_URLS[userRole] ?? "/dashboard", request.url);
         return NextResponse.redirect(dashboardUrl);
     }

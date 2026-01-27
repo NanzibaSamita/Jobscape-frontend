@@ -68,51 +68,76 @@ export default function LoginForm() {
   // ✅ Normalize user shape from FastAPI /auth/me
   const handleLogin = async (user: any, token: string, remember: boolean) => {
     console.log("🔵 handleLogin called");
-    console.log("🔵 user:", user);
-    console.log("🔵 role:", user?.role);
-    
-    const role = user?.role; 
-    
-    // Dispatch to Redux store
-    dispatch(loginUser({ user, token, roleWeight: role }));
-    console.log("🔵 Redux dispatch done");
-    
-    // Set server-side cookies
-    await loginAction(user.id, user.email, token, null, role);
-    console.log("🔵 Server cookies set");
-    
-    // Persist token client-side
-    persistToken(token, remember);
-    console.log("🔵 Token persisted");
+    console.log("user:", user);
+    console.log("role:", user?.role);
 
-    // Handle redirects - ONLY if explicitly set
-    if (redirectTo && redirectTo !== "/" && redirectTo !== "!") {
-      console.log("🔵 Redirecting to:", redirectTo);
+    const role = user?.role;
+
+    // ✅ Store in localStorage (simple approach)
+    localStorage.setItem("access_token", token);
+    localStorage.setItem("user_id", user.id);
+    localStorage.setItem("user_email", user.email);
+    localStorage.setItem("user_role", role);
+
+    // ✅ Set server-side cookies
+    await loginAction(user.id, user.email, token, null, role);
+
+    // ✅ Handle redirects based on role
+    if (redirectTo && redirectTo !== "" && redirectTo !== "null") {
+      console.log("Redirecting to:", redirectTo);
       return router.push(redirectTo);
     }
-    
-    // Route based on role
-    if (role === "JOB_SEEKER") {
-      console.log("🔵 Redirecting to /jobseeker/profile");
-      return router.push("/jobseeker/profile");
-    }
-    
+
+    // ✅ Route based on role - CHECK PROFILE COMPLETION
     if (role === "EMPLOYER") {
-      console.log("🔵 Redirecting to /employer/dashboard");
-      return router.push("/employer/dashboard");
+      try {
+        // Check if employer profile is completed
+        const profileRes = await axiosInstance.get("/employer/profile/me");
+        
+        if (!profileRes.data.profile_completed) {
+          console.log("Employer profile incomplete, redirecting to complete registration");
+          return router.push("/employer/register/complete");
+        } else {
+          console.log("Employer profile complete, redirecting to profile page");
+          return router.push("/employer/profile"); // ✅ Frontend page route
+        }
+      } catch (err) {
+        console.error("Failed to fetch employer profile:", err);
+        // If profile fetch fails, assume incomplete and redirect to complete registration
+        return router.push("/employer/register/complete"); // ✅ Better fallback
+      }
     }
-    
-    console.log("🔵 Redirecting to /");
+
+
+    if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
+      try {
+        // Check if job seeker profile is completed
+        const profileRes = await axiosInstance.get("/jobseeker/profile");
+        
+        if (!profileRes.data.profile_completed) {
+          console.log("Job seeker profile incomplete, redirecting to CV upload");
+          return router.push("/cv-upload");
+        } else {
+          console.log("Job seeker profile complete, redirecting to jobs");
+          return router.push("/jobs");
+        }
+      } catch (err) {
+        console.error("Failed to fetch job seeker profile:", err);
+        return router.push("/jobs");
+      }
+    }
+
+    // Fallback
+    console.log("Redirecting to /");
     return router.push("/");
   };
-
 
 
   const handelContinue = async (data: FormValues) => {
     setLoading(true);
 
     try {
-      // ✅ OAuth2PasswordRequestForm expects urlencoded username/password
+      // OAuth2PasswordRequestForm expects urlencoded username/password
       const body = new URLSearchParams();
       body.append("username", data.email);
       body.append("password", data.password);
@@ -122,17 +147,20 @@ export default function LoginForm() {
       });
 
       const token = loginRes?.data?.access_token;
+
       if (!token) {
         toast.error("Login failed: missing access token from server.");
         return;
       }
 
-      // ✅ Fetch user profile
+      // Fetch user profile
       const meRes = await axiosInstance.get("/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      // ✅ Call handleLogin with user data
       await handleLogin(meRes.data, token, !!data.rememberMe);
+
     } catch (err: any) {
       const axErr = err as AxiosError<any>;
       const detail =
@@ -143,11 +171,10 @@ export default function LoginForm() {
       // Optional routing based on message
       if (typeof detail === "string") {
         const d = detail.toLowerCase();
-
         if (d.includes("verify your email")) {
           router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
-        } else if (d.includes("upload") && d.includes("cv")) {
-          router.push("/signup"); // or your “upload-cv” step page
+        } else if (d.includes("upload") || d.includes("cv")) {
+          router.push("/signup"); // or your upload-cv step page
         }
       }
 
@@ -156,6 +183,7 @@ export default function LoginForm() {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center bg-white px-4">
