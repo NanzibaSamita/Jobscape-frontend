@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -30,8 +30,6 @@ import { REDIRECT_URLS } from "@/local/redirectDatas";
 // ✅ Your backend route
 const LOGIN_URL = "/auth/login";
 
-
-
 const formSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address." }),
   password: z.string().min(1, { message: "Password is required." }),
@@ -50,20 +48,43 @@ export default function LoginForm() {
   const router = useRouter();
   const dispatch = useAppDispatch();
 
+  // ✅ ADD THIS: Redirect if already logged in with VALID token
+  useEffect(() => {
+    async function checkAuth() {
+      const token = localStorage.getItem("access_token");
+      const role = localStorage.getItem("user_role");
+      
+      if (token && role) {
+        // ✅ Verify token is valid by calling /auth/me
+        try {
+          await axiosInstance.get("/auth/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          // ✅ Token is valid, redirect to dashboard
+          const dashboardUrl = role === "EMPLOYER" 
+            ? "/employer/profile" 
+            : role === "JOBSEEKER" || role === "JOB_SEEKER"
+            ? "/jobseeker/profile"
+            : "/";
+          
+          window.location.href = dashboardUrl;
+        } catch (error) {
+          // ✅ Token is invalid, clear it
+          console.log("Invalid token, clearing storage");
+          localStorage.clear();
+          sessionStorage.clear();
+        }
+      }
+    }
+
+    checkAuth();
+  }, []);
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { email: "", password: "", rememberMe: false },
   });
-
-  // ✅ Store token based on rememberMe
-  const persistToken = (token: string, remember: boolean) => {
-    try {
-      const storage = remember ? localStorage : sessionStorage;
-      storage.setItem("access_token", token);
-    } catch {
-      // ignore
-    }
-  };
 
   // ✅ Normalize user shape from FastAPI /auth/me
   const handleLogin = async (user: any, token: string, remember: boolean) => {
@@ -85,7 +106,7 @@ export default function LoginForm() {
     // ✅ Handle redirects based on role
     if (redirectTo && redirectTo !== "" && redirectTo !== "null") {
       console.log("Redirecting to:", redirectTo);
-      return router.push(redirectTo);
+      return window.location.href = redirectTo;
     }
 
     // ✅ Route based on role - CHECK PROFILE COMPLETION
@@ -96,18 +117,16 @@ export default function LoginForm() {
         
         if (!profileRes.data.profile_completed) {
           console.log("Employer profile incomplete, redirecting to complete registration");
-          return router.push("/employer/register/complete");
+          return window.location.href = "/employer/register/complete";
         } else {
           console.log("Employer profile complete, redirecting to profile page");
-          return router.push("/employer/profile"); // ✅ Frontend page route
+          return window.location.href = "/employer/profile";
         }
       } catch (err) {
         console.error("Failed to fetch employer profile:", err);
-        // If profile fetch fails, assume incomplete and redirect to complete registration
-        return router.push("/employer/register/complete"); // ✅ Better fallback
+        return window.location.href = "/employer/register/complete";
       }
     }
-
 
     if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
       try {
@@ -116,22 +135,21 @@ export default function LoginForm() {
         
         if (!profileRes.data.profile_completed) {
           console.log("Job seeker profile incomplete, redirecting to CV upload");
-          return router.push("/cv-upload");
+          return window.location.href = "/cv-upload";
         } else {
-          console.log("Job seeker profile complete, redirecting to jobs");
-          return router.push("/jobs");
+          console.log("Job seeker profile complete, redirecting to profile");
+          return window.location.href = "/jobseeker/profile";
         }
       } catch (err) {
         console.error("Failed to fetch job seeker profile:", err);
-        return router.push("/jobs");
+        return window.location.href = "/jobseeker/profile";
       }
     }
 
     // Fallback
     console.log("Redirecting to /");
-    return router.push("/");
+    return window.location.href = "/";
   };
-
 
   const handelContinue = async (data: FormValues) => {
     setLoading(true);
@@ -174,7 +192,7 @@ export default function LoginForm() {
         if (d.includes("verify your email")) {
           router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
         } else if (d.includes("upload") || d.includes("cv")) {
-          router.push("/signup"); // or your upload-cv step page
+          router.push("/signup");
         }
       }
 
@@ -183,7 +201,6 @@ export default function LoginForm() {
       setLoading(false);
     }
   };
-
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center bg-white px-4">

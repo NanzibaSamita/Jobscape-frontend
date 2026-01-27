@@ -6,19 +6,27 @@ import { Button } from "@/components/ui/button";
 import { LogOut, User, Briefcase, FileText } from "lucide-react";
 import { toast } from "react-toastify";
 
-export default function JobSeekerLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function JobSeekerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // ✅ Clear all storage
     localStorage.clear();
     sessionStorage.clear();
+
+    // ✅ Clear server-side cookies
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch (error) {
+      // Ignore errors
+    }
+
+    // ✅ Show success message
     toast.success("Logged out successfully");
-    router.push("/login");
+
+    // ✅ Hard redirect to login (bypasses cache)
+    window.location.href = "/login";
   };
 
   const navItems = [
@@ -60,18 +68,18 @@ export default function JobSeekerLayout({
                   </Link>
                 );
               })}
-            </div>
 
-            {/* Logout Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
+              {/* Logout Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
       </nav>
@@ -81,3 +89,25 @@ export default function JobSeekerLayout({
     </div>
   );
 }
+
+const handleLogout = async () => {
+  try {
+    // ✅ Clear server-side cookies FIRST
+    await fetch("/api/logout", { method: "POST" });
+  } catch (error) {
+    console.error("Logout API error:", error);
+  }
+
+  // ✅ Clear all client storage
+  localStorage.clear();
+  sessionStorage.clear();
+
+  // ✅ Show success message
+  toast.success("Logged out successfully");
+
+  // ✅ Hard redirect to login
+  setTimeout(() => {
+    window.location.href = "/login";
+  }, 100); // Small delay to ensure cleanup completes
+};
+

@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import axiosInstance from "@/lib/axios/axios";
+import { axiosInstance } from "@/lib/axios/axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Building, Mail, MapPin, Globe, Edit } from "lucide-react";
+import { Loader2, Building, Mail, MapPin, Globe, Edit, LogOut } from "lucide-react";
 import Link from "next/link";
 
 interface EmployerProfile {
@@ -20,9 +20,9 @@ interface EmployerProfile {
   location?: string;
   companysize?: string;
   description?: string;
-  profilecompleted: boolean;
-  verificationtier: string;
-  trustscore: number;
+  profile_completed: boolean;
+  verification_tier: string;
+  trust_score: number;
 }
 
 export default function EmployerProfilePage() {
@@ -47,6 +47,28 @@ export default function EmployerProfilePage() {
     }
   }
 
+  // ✅ ADD THIS: Proper logout handler
+  const handleLogout = async () => {
+    try {
+      // ✅ Clear server-side cookies FIRST
+      await fetch("/api/logout", { method: "POST" });
+    } catch (error) {
+      console.error("Logout API error:", error);
+    }
+
+    // ✅ Clear all client storage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // ✅ Show success message
+    toast.success("Logged out successfully");
+
+    // ✅ Hard redirect to login
+    setTimeout(() => {
+      window.location.href = "/login";
+    }, 100);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -64,17 +86,34 @@ export default function EmployerProfilePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">{profile.companyname}</h1>
-            <p className="text-gray-600 mt-1">{profile.fullname} · {profile.jobtitle || "Employer"}</p>
+            <p className="text-gray-600 mt-1">
+              {profile.fullname} · {profile.jobtitle || "Employer"}
+            </p>
           </div>
-          <Link href="/employer/profile/edit">
-            <Button>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Profile
+          
+          {/* ✅ ADD THIS: Action buttons */}
+          <div className="flex items-center gap-2">
+            <Link href="/employer/profile/edit">
+              <Button>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Profile
+              </Button>
+            </Link>
+            
+            {/* ✅ Logout button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
             </Button>
-          </Link>
+          </div>
         </div>
 
-        {/* Profile Info */}
+        {/* Profile Info Card */}
         <Card>
           <CardHeader>
             <CardTitle>Company Information</CardTitle>
@@ -87,6 +126,7 @@ export default function EmployerProfilePage() {
                 <p className="font-medium">{profile.companyname}</p>
               </div>
             </div>
+
             <div className="flex items-center gap-3">
               <Mail className="h-5 w-5 text-gray-400" />
               <div>
@@ -94,6 +134,7 @@ export default function EmployerProfilePage() {
                 <p className="font-medium">{profile.workemail}</p>
               </div>
             </div>
+
             {profile.location && (
               <div className="flex items-center gap-3">
                 <MapPin className="h-5 w-5 text-gray-400" />
@@ -103,17 +144,24 @@ export default function EmployerProfilePage() {
                 </div>
               </div>
             )}
+
             {profile.companywebsite && (
               <div className="flex items-center gap-3">
                 <Globe className="h-5 w-5 text-gray-400" />
                 <div>
                   <p className="text-sm text-gray-500">Website</p>
-                  <a href={profile.companywebsite} target="_blank" rel="noopener noreferrer" className="font-medium text-purple-600 hover:underline">
+                  <a
+                    href={profile.companywebsite}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-purple-600 hover:underline"
+                  >
                     {profile.companywebsite}
                   </a>
                 </div>
               </div>
             )}
+
             {profile.description && (
               <div>
                 <p className="text-sm text-gray-500 mb-1">Description</p>
@@ -123,7 +171,7 @@ export default function EmployerProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Verification Status */}
+        {/* Verification Status Card */}
         <Card>
           <CardHeader>
             <CardTitle>Verification Status</CardTitle>
@@ -132,11 +180,11 @@ export default function EmployerProfilePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">Trust Tier</p>
-                <p className="text-lg font-semibold">{profile.verificationtier}</p>
+                <p className="text-lg font-semibold">{profile.verification_tier}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Trust Score</p>
-                <p className="text-lg font-semibold">{profile.trustscore}/100</p>
+                <p className="text-lg font-semibold">{profile.trust_score}/100</p>
               </div>
             </div>
           </CardContent>
@@ -145,10 +193,14 @@ export default function EmployerProfilePage() {
         {/* Quick Actions */}
         <div className="grid grid-cols-2 gap-4">
           <Link href="/employer/jobs/create">
-            <Button className="w-full" variant="outline">Post a Job</Button>
+            <Button className="w-full" variant="outline">
+              Post a Job
+            </Button>
           </Link>
           <Link href="/employer/jobs">
-            <Button className="w-full" variant="outline">My Jobs</Button>
+            <Button className="w-full" variant="outline">
+              My Jobs
+            </Button>
           </Link>
         </div>
       </div>
