@@ -1,51 +1,77 @@
-import Link from "next/link";
+"use client";
 
-function getInitials(name?: string | null) {
-  if (!name || typeof name !== "string") {
-    return "GU"; // Default: Guest User
-  }
-  
-  const parts = name.trim().split(" ");
-  const first = parts[0]?.[0] ?? "G";
-  const last = parts[parts.length - 1]?.[0] ?? "U";
-  return (first + last).toUpperCase();
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { LogOut, Edit, MapPin } from "lucide-react";
+import { toast } from "react-toastify";
+
+interface HeaderProps {
+  name: string;
+  location?: string;
 }
 
-export default function Header({
-  name,
-  location,
-}: {
-  name?: string | null;
-  location?: string | null;
-}) {
-  const displayName = name || "Guest User";
-  const displayLocation = location || "Location not set";
+export default function Header({ name, location }: HeaderProps) {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    // Clear all authentication data
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Also clear cookies if you're using them
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    
+    // Show success message
+    toast.success("Logged out successfully");
+    
+    // Redirect to login page
+    router.push("/login");
+  };
+
+  const handleEditProfile = () => {
+    router.push("/jobseeker/profile/edit");
+  };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-6">
+    <div className="bg-white rounded-xl p-6 shadow-sm">
       <div className="flex items-start justify-between">
-        {/* Left: Avatar + Info */}
-        <div className="flex items-start gap-4">
-          {/* Avatar */}
-          <div className="h-20 w-20 rounded-full bg-purple-100 flex items-center justify-center">
-            <span className="text-2xl font-semibold text-purple-600">
-              {getInitials(name)}
-            </span>
-          </div>
-
-          {/* Name & Location */}
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
-            <p className="text-sm text-gray-500 mt-1">{displayLocation}</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{name}</h1>
+          {location && (
+            <div className="flex items-center gap-1 mt-2 text-gray-600">
+              <MapPin className="h-4 w-4" />
+              <span className="text-sm">{location}</span>
+            </div>
+          )}
         </div>
 
-        {/* Edit button (right side) */}
-        <Link href="/jobseeker/profile/edit">
-          <button className="bg-white border border-purple-200 px-4 py-1.5 rounded-full text-xs font-semibold hover:bg-purple-50 transition">
-            Edit
-          </button>
-        </Link>
+        <div className="flex gap-2">
+          {/* Edit Profile Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleEditProfile}
+            className="flex items-center gap-2"
+          >
+            <Edit className="h-4 w-4" />
+            Edit Profile
+          </Button>
+
+          {/* Logout Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
       </div>
     </div>
   );

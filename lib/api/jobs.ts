@@ -1,5 +1,4 @@
-import { axiosInstance } from "./axios";
-
+import { axiosInstance } from "@/lib/axios/axios";
 export interface Job {
   id: string;
   employer_id: string;

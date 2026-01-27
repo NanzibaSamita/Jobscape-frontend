@@ -41,8 +41,11 @@ const completeRegistrationSchema = z.object({
   description: z.string().min(10, "Description must be at least 10 characters"),
   company_type: z.enum(["REGISTERED", "STARTUP"]),
   is_startup: z.boolean().optional(),
-  startup_stage: z.string().optional(),
-  founded_year: z.number().optional(),
+  startup_stage: z.enum(["Idea", "MVP", "Early Revenue", "Growth"]).optional(),
+  founded_year: z.number()
+    .min(2000, "Founded year must be 2000 or later")
+    .max(new Date().getFullYear(), "Founded year cannot be in the future")
+    .optional(),
 });
 
 type CompleteRegistrationValues = z.infer<typeof completeRegistrationSchema>;
@@ -66,12 +69,11 @@ export default function CompleteEmployerRegistrationPage() {
       description: "",
       company_type: "REGISTERED",
       is_startup: false,
-      startup_stage: "",
-      founded_year: new Date().getFullYear(),
+      startup_stage: "Idea",
+      founded_year: 2024,
     },
   });
 
-  // Check if user is authenticated
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) {
@@ -85,21 +87,49 @@ export default function CompleteEmployerRegistrationPage() {
 
     try {
       const payload = {
-        ...data,
+        full_name: data.full_name,
+        job_title: data.job_title,
+        work_email: data.work_email,
+        company_name: data.company_name,
+        company_website: data.company_website || null,
+        industry: data.industry,
+        location: data.location,
+        company_size: data.company_size,
+        description: data.description,
+        company_type: data.company_type,
         is_startup: companyType === "STARTUP",
+        startup_stage: companyType === "STARTUP" ? data.startup_stage : null,
+        founded_year: companyType === "STARTUP" && data.founded_year ? parseInt(String(data.founded_year)) : null,
       };
+
+      console.log("📤 Sending payload:", payload);
 
       const response = await axiosInstance.post("/employer/register/complete", payload);
 
       toast.success("Registration completed successfully!");
 
-      // Redirect to work email verification
-      router.push("/employer/verify-work-email");
+      // ✅ Store the access token if returned
+      if (response.data?.access_token) {
+        localStorage.setItem("access_token", response.data.access_token);
+      }
+
+      // ✅ Redirect to employer dashboard/profile
+      router.push("/employer/dashboard"); // or "/employer/profile"
 
     } catch (error: any) {
-      console.error("Complete registration error:", error);
-      const errorMsg = error?.response?.data?.detail || "Failed to complete registration";
-      toast.error(errorMsg);
+      console.error("❌ Complete registration error:", error);
+      
+      if (error?.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          error.response.data.detail.forEach((err: any) => {
+            toast.error(`${err.loc?.join(" → ")}: ${err.msg}`);
+          });
+        } else {
+          toast.error(error.response.data.detail);
+        }
+      } else {
+        toast.error("Failed to complete registration");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +147,6 @@ export default function CompleteEmployerRegistrationPage() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Full Name */}
             <FormField
               control={form.control}
               name="full_name"
@@ -132,7 +161,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Job Title */}
             <FormField
               control={form.control}
               name="job_title"
@@ -147,7 +175,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Work Email */}
             <FormField
               control={form.control}
               name="work_email"
@@ -165,7 +192,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Company Type */}
             <FormField
               control={form.control}
               name="company_type"
@@ -194,7 +220,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Company Name */}
             <FormField
               control={form.control}
               name="company_name"
@@ -209,7 +234,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Company Website */}
             <FormField
               control={form.control}
               name="company_website"
@@ -229,7 +253,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Industry */}
             <FormField
               control={form.control}
               name="industry"
@@ -244,7 +267,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Location */}
             <FormField
               control={form.control}
               name="location"
@@ -259,7 +281,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Company Size */}
             <FormField
               control={form.control}
               name="company_size"
@@ -285,7 +306,6 @@ export default function CompleteEmployerRegistrationPage() {
               )}
             />
 
-            {/* Startup Fields */}
             {companyType === "STARTUP" && (
               <>
                 <FormField
@@ -301,10 +321,10 @@ export default function CompleteEmployerRegistrationPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="idea">Idea Stage</SelectItem>
-                          <SelectItem value="mvp">MVP</SelectItem>
-                          <SelectItem value="early">Early Stage</SelectItem>
-                          <SelectItem value="growth">Growth Stage</SelectItem>
+                          <SelectItem value="Idea">Idea Stage</SelectItem>
+                          <SelectItem value="MVP">MVP</SelectItem>
+                          <SelectItem value="Early Revenue">Early Revenue</SelectItem>
+                          <SelectItem value="Growth">Growth Stage</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -322,10 +342,13 @@ export default function CompleteEmployerRegistrationPage() {
                         <Input
                           type="number"
                           placeholder="2024"
+                          min={2000}
+                          max={new Date().getFullYear()}
                           {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value))}
                         />
                       </FormControl>
+                      <FormDescription>Must be 2000 or later</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -333,7 +356,6 @@ export default function CompleteEmployerRegistrationPage() {
               </>
             )}
 
-            {/* Description */}
             <FormField
               control={form.control}
               name="description"

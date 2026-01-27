@@ -30,7 +30,7 @@ export default function VerifyEmailConfirmPage() {
       }
 
       try {
-        // ✅ Verify email
+        // ✅ Verify email (works for both job seekers and employers)
         const res = await axiosInstance.post("/auth/verify-email/confirm", { 
           token: token 
         });
@@ -40,36 +40,38 @@ export default function VerifyEmailConfirmPage() {
         const verifiedEmail = res.data?.email ?? emailFromQuery ?? null;
         setEmail(verifiedEmail);
 
+        const role = res.data?.role;
+        const accessToken = res.data?.access_token;
         const cvUploadToken = res.data?.cv_upload_token;
+        const nextStep = res.data?.next_step;
 
         setStatus("success");
         setMessage(res.data?.message || "Email verified successfully!");
 
-        // ✅ AUTO-LOGIN: Get access token after verification
-        if (!cvUploadToken) {
-          // Employer - need to login to get access_token
-          try {
-            // Use the verified email to login (we don't have password, so we need a different approach)
-            // Backend should return an access token on verification for seamless flow
-            
-            // For now, redirect to a page that will handle the token exchange
-            toast.success("Email verified! Completing your profile...");
-            
-            window.setTimeout(() => {
-              router.replace(`/employer/post-verification?email=${encodeURIComponent(verifiedEmail)}`);
-            }, 1500);
-            
-          } catch (err) {
-            console.error("Auto-login failed:", err);
-            toast.error("Please login to continue");
-            router.replace("/login");
+        // ✅ Store access token
+        if (accessToken) {
+          localStorage.setItem("access_token", accessToken);
+          localStorage.setItem("user_email", verifiedEmail);
+          localStorage.setItem("user_role", role);
+        }
+
+        // ✅ Role-based redirect
+        if (role === "EMPLOYER") {
+          toast.success("Email verified! Please complete your profile.");
+          window.setTimeout(() => {
+            router.replace("/employer/register/complete");
+          }, 1500);
+        } else if (role === "JOB_SEEKER" || role === "JOBSEEKER") {
+          if (cvUploadToken) {
+            localStorage.setItem("cv_upload_token", cvUploadToken);
           }
-        } else {
-          // Job seeker
-          localStorage.setItem("cv_upload_token", cvUploadToken);
+          toast.success("Email verified! Please upload your CV.");
           window.setTimeout(() => {
             router.replace("/cv-upload");
           }, 1500);
+        } else {
+          // Admin or other roles
+          router.replace("/dashboard");
         }
 
       } catch (err: any) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; // ✅ MUST IMPORT THIS
 import { getUserProfile, JobSeekerProfile } from "@/lib/api/profile";
 import { toast } from "react-toastify";
 
@@ -19,9 +20,18 @@ import Links from "./Links";
 export default function Page() {
   const [profile, setProfile] = useState<JobSeekerProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter(); // ✅ MUST ADD THIS
 
   useEffect(() => {
     async function fetchProfile() {
+      // ✅ MUST HAVE THIS CHECK - Without it, you'll get the loop error
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        console.log("❌ No token found, redirecting to login");
+        router.push("/login");
+        return;
+      }
+
       try {
         console.log("🔵 Fetching profile...");
         const data = await getUserProfile();
@@ -29,6 +39,15 @@ export default function Page() {
         setProfile(data.profile);
       } catch (error: any) {
         console.error("❌ Failed to fetch profile:", error);
+        
+        // ✅ MUST HAVE THIS - Redirect on 401 error
+        if (error?.response?.status === 401) {
+          console.log("❌ Unauthorized, redirecting to login");
+          localStorage.clear();
+          router.push("/login");
+          return;
+        }
+        
         toast.error(
           error?.response?.data?.detail || "Failed to load profile"
         );
@@ -38,7 +57,7 @@ export default function Page() {
     }
 
     fetchProfile();
-  }, []);
+  }, [router]); // ✅ ADD router to dependencies
 
   if (loading) {
     return (

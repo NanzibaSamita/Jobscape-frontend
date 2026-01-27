@@ -81,17 +81,17 @@ axiosInstance.interceptors.response.use(
         // ✅ FIX: Prevent infinite redirect loop
         // Don't redirect if already on auth pages
         const isAuthPage =
-          currentPath.includes("/login") ||
-          currentPath.includes("/register") ||
-          currentPath.includes("/signup") ||
-          currentPath.includes("/verify-email") ||
-          currentPath.includes("/forgot-password") ||
-          currentPath.includes("/reset-password");
+          currentPath === "/login" ||
+          currentPath === "/signup" ||
+          currentPath === "/register" ||
+          currentPath.startsWith("/verify-email") ||
+          currentPath.startsWith("/forgot-password") ||
+          currentPath.startsWith("/reset-password");
 
         if (!isAuthPage) {
           // Preserve current URL for redirect after login
           const redirectParam =
-            currentPath !== "/"
+            currentPath !== "/" && currentPath !== "/login"
               ? `?redirect=${encodeURIComponent(currentPath)}`
               : "";
 
