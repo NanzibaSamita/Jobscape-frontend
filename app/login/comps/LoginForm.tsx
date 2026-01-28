@@ -54,30 +54,37 @@ export default function LoginForm() {
       const token = localStorage.getItem("access_token");
       const role = localStorage.getItem("user_role");
       
-      if (token && role) {
-        // ✅ Verify token is valid by calling /auth/me
-        try {
-          await axiosInstance.get("/auth/me", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-
-          // ✅ Token is valid, redirect to dashboard
-          const dashboardUrl = role === "EMPLOYER" 
-            ? "/employer/profile" 
-            : role === "JOBSEEKER" || role === "JOB_SEEKER"
-            ? "/jobseeker/profile"
-            : "/";
-          
-          window.location.href = dashboardUrl;
-        } catch (error) {
-          // ✅ Token is invalid, clear it
-          console.log("Invalid token, clearing storage");
-          localStorage.clear();
-          sessionStorage.clear();
-        }
+      // If no token or role, don't do anything
+      if (!token || !role) {
+        return;
+      }
+      
+      try {
+        // Verify token is valid
+        const meRes = await axiosInstance.get("/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        // Token is valid, but DON'T try to fetch profile here
+        // Just redirect to the appropriate page
+        if (role === "ADMIN") {
+        window.location.href = "/admin";
+      } else if (role === "EMPLOYER") {
+        window.location.href = "/employer/profile";
+      } else if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
+        window.location.href = "/jobseeker/profile";
+      } else {
+        window.location.href = "/";
+      }
+      } catch (error) {
+        // Token is invalid or expired
+        console.log("Token validation failed, clearing storage");
+        localStorage.clear();
+        sessionStorage.clear();
+        // Stay on login page
       }
     }
-
+    
     checkAuth();
   }, []);
 

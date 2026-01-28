@@ -6,7 +6,7 @@ import { toast } from "react-toastify";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Eye } from "lucide-react";
+import { Loader2, Plus, Eye, ArrowLeft } from "lucide-react";  // ← Added ArrowLeft
 import Link from "next/link";
 
 export default function EmployerJobsPage() {
@@ -20,8 +20,8 @@ export default function EmployerJobsPage() {
   async function fetchJobs() {
     try {
       setLoading(true);
-      const data = await getMyJobs();
-      setJobs(data.items);
+      const jobs = await getMyJobs();
+      setJobs(jobs);
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || "Failed to load jobs");
     } finally {
@@ -40,6 +40,14 @@ export default function EmployerJobsPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
+        {/* ✅ NEW: Back button */}
+        <Link href="/employer/profile">
+          <Button variant="ghost" size="sm" className="mb-2">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Profile
+          </Button>
+        </Link>
+
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">My Posted Jobs</h1>
           <Link href="/employer/jobs/create">

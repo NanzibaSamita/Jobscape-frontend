@@ -60,9 +60,9 @@ export async function getJobById(jobId: string): Promise<Job> {
 /**
  * Get all jobs (employer use)
  */
-export async function getMyJobs(skip: number = 0, limit: number = 20): Promise<JobSearchResponse> {
-  const response = await axiosInstance.get("/employer/my-jobs", {
+export async function getMyJobs(skip: number = 0, limit: number = 20): Promise<Job[]> {  // ← Changed return type
+  const response = await axiosInstance.get("/employer/jobs", {
     params: { skip, limit },
   });
-  return response.data;
+  return response.data;  // ✅ Returns array directly
 }

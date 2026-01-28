@@ -114,7 +114,7 @@ export default function CompleteEmployerRegistrationPage() {
       }
 
       // ✅ Redirect to employer dashboard/profile
-      router.push("/employer/dashboard"); // or "/employer/profile"
+      router.push("/login"); // or "/employer/profile"
 
     } catch (error: any) {
       console.error("❌ Complete registration error:", error);
