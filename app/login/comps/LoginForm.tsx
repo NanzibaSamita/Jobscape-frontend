@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,11 +23,7 @@ import { Input } from "@/components/ui/input";
 
 import { axiosInstance } from "@/lib/axios/axios";
 import { loginAction } from "@/lib/cookies";
-import { useAppDispatch } from "@/lib/store";
-import { loginUser } from "@/lib/store/slices/authSlice";
-import { REDIRECT_URLS } from "@/local/redirectDatas";
 
-// ✅ Your backend route
 const LOGIN_URL = "/auth/login";
 
 const formSchema = z.object({
@@ -41,120 +37,115 @@ type FormValues = z.infer<typeof formSchema>;
 export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [checking, setChecking] = useState(true);  // ← Add this
+  const hasCheckedAuth = useRef(false);  // ← Prevent multiple checks
 
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
-
   const router = useRouter();
-  const dispatch = useAppDispatch();
 
-  // ✅ ADD THIS: Redirect if already logged in with VALID token
+  // ✅ FIXED: Only redirect if user has valid token and NO redirect param
   useEffect(() => {
+    if (hasCheckedAuth.current) return;  // ← Prevent running twice
+    hasCheckedAuth.current = true;
+
     async function checkAuth() {
       const token = localStorage.getItem("access_token");
       const role = localStorage.getItem("user_role");
       
-      // If no token or role, don't do anything
+      // If no token, user needs to login
       if (!token || !role) {
+        setChecking(false);
+        return;
+      }
+      
+      // ✅ If there's a redirect param, user was sent here on purpose
+      // Don't auto-redirect them away
+      if (redirectTo && redirectTo !== "/") {
+        console.log("User has redirect param, staying on login page");
+        setChecking(false);
         return;
       }
       
       try {
-        // Verify token is valid
-        const meRes = await axiosInstance.get("/auth/me", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        // Verify token is still valid
+        await axiosInstance.get("/auth/me");
         
-        // Token is valid, but DON'T try to fetch profile here
-        // Just redirect to the appropriate page
+        // Token is valid, redirect to appropriate page
+        console.log("User already logged in, redirecting...");
+        
         if (role === "ADMIN") {
-        window.location.href = "/admin";
-      } else if (role === "EMPLOYER") {
-        window.location.href = "/employer/profile";
-      } else if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
-        window.location.href = "/jobseeker/profile";
-      } else {
-        window.location.href = "/";
-      }
+          window.location.href = "/admin";
+        } else if (role === "EMPLOYER") {
+          window.location.href = "/employer/profile";
+        } else if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
+          window.location.href = "/jobseeker/profile";
+        } else {
+          window.location.href = "/";
+        }
       } catch (error) {
-        // Token is invalid or expired
-        console.log("Token validation failed, clearing storage");
+        // Token is invalid, clear and stay on login
+        console.log("Token invalid, clearing storage");
         localStorage.clear();
         sessionStorage.clear();
-        // Stay on login page
+        setChecking(false);
       }
     }
     
     checkAuth();
-  }, []);
+  }, [redirectTo]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { email: "", password: "", rememberMe: false },
   });
 
-  // ✅ Normalize user shape from FastAPI /auth/me
   const handleLogin = async (user: any, token: string, remember: boolean) => {
-    console.log("🔵 handleLogin called");
-    console.log("user:", user);
-    console.log("role:", user?.role);
-
     const role = user?.role;
 
-    // ✅ Store in localStorage (simple approach)
+    // Store in localStorage
     localStorage.setItem("access_token", token);
     localStorage.setItem("user_id", user.id);
     localStorage.setItem("user_email", user.email);
     localStorage.setItem("user_role", role);
 
-    // ✅ Set server-side cookies
+    // Set server-side cookies
     await loginAction(user.id, user.email, token, null, role);
 
-    // ✅ Handle redirects based on role
-    if (redirectTo && redirectTo !== "" && redirectTo !== "null") {
-      console.log("Redirecting to:", redirectTo);
+    // Handle redirects
+    if (redirectTo && redirectTo !== "/" && redirectTo !== "null") {
       return window.location.href = redirectTo;
     }
 
-    // ✅ Route based on role - CHECK PROFILE COMPLETION
+    // Route based on role
     if (role === "EMPLOYER") {
       try {
-        // Check if employer profile is completed
         const profileRes = await axiosInstance.get("/employer/profile/me");
         
         if (!profileRes.data.profile_completed) {
-          console.log("Employer profile incomplete, redirecting to complete registration");
           return window.location.href = "/employer/register/complete";
         } else {
-          console.log("Employer profile complete, redirecting to profile page");
           return window.location.href = "/employer/profile";
         }
       } catch (err) {
-        console.error("Failed to fetch employer profile:", err);
         return window.location.href = "/employer/register/complete";
       }
     }
 
     if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
       try {
-        // Check if job seeker profile is completed
         const profileRes = await axiosInstance.get("/jobseeker/profile");
         
         if (!profileRes.data.profile_completed) {
-          console.log("Job seeker profile incomplete, redirecting to CV upload");
           return window.location.href = "/cv-upload";
         } else {
-          console.log("Job seeker profile complete, redirecting to profile");
           return window.location.href = "/jobseeker/profile";
         }
       } catch (err) {
-        console.error("Failed to fetch job seeker profile:", err);
         return window.location.href = "/jobseeker/profile";
       }
     }
 
-    // Fallback
-    console.log("Redirecting to /");
     return window.location.href = "/";
   };
 
@@ -162,7 +153,6 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      // OAuth2PasswordRequestForm expects urlencoded username/password
       const body = new URLSearchParams();
       body.append("username", data.email);
       body.append("password", data.password);
@@ -183,7 +173,6 @@ export default function LoginForm() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // ✅ Call handleLogin with user data
       await handleLogin(meRes.data, token, !!data.rememberMe);
 
     } catch (err: any) {
@@ -193,7 +182,6 @@ export default function LoginForm() {
         axErr?.response?.data?.message ||
         "An error occurred while logging in.";
 
-      // Optional routing based on message
       if (typeof detail === "string") {
         const d = detail.toLowerCase();
         if (d.includes("verify your email")) {
@@ -208,6 +196,15 @@ export default function LoginForm() {
       setLoading(false);
     }
   };
+
+  // ✅ Show loading while checking auth
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center bg-white px-4">
