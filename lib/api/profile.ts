@@ -99,3 +99,4 @@ export async function removeProfilePicture(): Promise<{ message: string }> {
   const response = await axiosInstance.delete("/profile/profile-picture");
   return response.data;
 }
+
