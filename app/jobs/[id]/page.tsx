@@ -5,7 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { getJobById, Job } from "@/lib/api/jobs";
 import { applyToJob } from "@/lib/api/applications";
-import { getCoverLetters, CoverLetter } from "@/lib/api/coverletters";
+import { getCoverLetters, CoverLetter, createCoverLetter } from "@/lib/api/coverletters";
+import { getMyResumes, Resume } from "@/lib/api/resume";
+import { generateCoverLetter } from "@/lib/api/ai";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +28,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  MapPin,
   Briefcase,
   Clock,
   DollarSign,
@@ -35,8 +36,14 @@ import {
   Loader2,
   ArrowLeft,
   FileText,
+  Sparkles,
+  Save,
+  MapPin,
 } from "lucide-react";
 import Link from "next/link";
+import UploadFile from "@/app/signup/comps/UploadFile" // Your existing upload component
+import { reUploadResume } from "@/lib/api/resume"; // Add this import
+
 
 export default function JobDetailPage() {
   const params = useParams();
@@ -49,10 +56,21 @@ export default function JobDetailPage() {
   const [applying, setApplying] = useState(false);
 
   // Application form state
+  const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [coverLetterText, setCoverLetterText] = useState("");
   const [coverLetters, setCoverLetters] = useState<CoverLetter[]>([]);
   const [selectedCoverLetterId, setSelectedCoverLetterId] = useState("");
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
+  
+  // AI generation state
+  const [generatingAI, setGeneratingAI] = useState(false);
+  
+  // Save cover letter state
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [coverLetterTitle, setCoverLetterTitle] = useState("");
+  const [savingCoverLetter, setSavingCoverLetter] = useState(false);
 
   useEffect(() => {
     fetchJobDetails();
@@ -73,21 +91,101 @@ export default function JobDetailPage() {
 
   async function openApplyModal() {
     try {
+      // Fetch user's resumes
+      const resumesData = await getMyResumes();
+      setResumes(resumesData.resumes);
+      
+      // Set primary resume as default
+      const primaryResume = resumesData.resumes.find((r) => r.is_primary);
+      if (primaryResume) {
+        setSelectedResumeId(primaryResume.id);
+      }
+
       // Fetch user's cover letters
       const letters = await getCoverLetters();
       setCoverLetters(letters);
+
       setIsApplyModalOpen(true);
     } catch (error: any) {
-      toast.error("Failed to load cover letters");
+      toast.error("Failed to load application data");
       setIsApplyModalOpen(true);
+    }
+  }
+
+  async function handleResumeUpload(file: File) {
+    if (!file) return;
+    
+    try {
+      setUploadingResume(true);
+      const result = await reUploadResume(file);
+      toast.success(result.message || "Resume uploaded successfully!");
+      
+      // Refresh resumes list and select the new one
+      const resumesData = await getMyResumes();
+      setResumes(resumesData.resumes);
+      
+      // Set the newly uploaded resume as selected (it should be primary)
+      const primaryResume = resumesData.resumes.find((r) => r.is_primary);
+      if (primaryResume) {
+        setSelectedResumeId(primaryResume.id);
+        setNewResumeFile(null); // Clear the temp file
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || "Failed to upload resume");
+    } finally {
+      setUploadingResume(false);
     }
   }
 
   function handleCoverLetterSelect(id: string) {
     setSelectedCoverLetterId(id);
-    const selected = coverLetters.find((cl) => cl.id === id);
-    if (selected) {
-      setCoverLetterText(selected.content);
+    if (id === "None") {
+      setCoverLetterText("");
+    } else {
+      const selected = coverLetters.find((cl) => cl.id === id);
+      if (selected) {
+        setCoverLetterText(selected.content);
+      }
+    }
+  }
+
+  async function handleGenerateAICoverLetter() {
+    try {
+      setGeneratingAI(true);
+      const result = await generateCoverLetter(jobId);
+      setCoverLetterText(result.cover_letter);
+      setSelectedCoverLetterId(""); // Clear saved letter selection
+      toast.success("AI cover letter generated!");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || "Failed to generate cover letter");
+    } finally {
+      setGeneratingAI(false);
+    }
+  }
+
+  async function handleSaveCoverLetter() {
+    if (!coverLetterTitle.trim()) {
+      toast.error("Please enter a title for the cover letter");
+      return;
+    }
+
+    try {
+      setSavingCoverLetter(true);
+      await createCoverLetter({
+        title: coverLetterTitle,
+        content: coverLetterText,
+      });
+      toast.success("Cover letter saved!");
+      setShowSaveDialog(false);
+      setCoverLetterTitle("");
+      
+      // Refresh cover letters list
+      const letters = await getCoverLetters();
+      setCoverLetters(letters);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || "Failed to save cover letter");
+    } finally {
+      setSavingCoverLetter(false);
     }
   }
 
@@ -122,9 +220,7 @@ export default function JobDetailPage() {
     );
   }
 
-  if (!job) {
-    return null;
-  }
+  if (!job) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -198,8 +294,8 @@ export default function JobDetailPage() {
                 <div>
                   <p className="text-xs text-gray-600">Salary Range</p>
                   <p className="font-semibold text-green-700">
-                    ৳{job.salary_min.toLocaleString()}
-                    {job.salary_max ? ` - ৳${job.salary_max.toLocaleString()}` : "+"}
+                    {job.salary_min.toLocaleString()}
+                    {job.salary_max ? ` - ${job.salary_max.toLocaleString()}` : ""}
                   </p>
                 </div>
               </div>
@@ -247,7 +343,11 @@ export default function JobDetailPage() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {job.required_skills.map((skill, idx) => (
-                <Badge key={idx} variant="default" className="bg-purple-100 text-purple-800">
+                <Badge
+                  key={idx}
+                  variant="default"
+                  className="bg-purple-100 text-purple-800"
+                >
                   {skill}
                 </Badge>
               ))}
@@ -285,24 +385,52 @@ export default function JobDetailPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Resume Selection */}
-            <div>
+            {/* Resume Selection + Upload */}
+            <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Resume <span className="text-red-500">*</span>
               </label>
-              <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a resume" />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* TODO: Fetch user's resumes and populate */}
-                  <SelectItem value="resume-1">Main Resume.pdf</SelectItem>
-                  <SelectItem value="resume-2">Tech Resume.pdf</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                Don't have a resume? <Link href="/jobseeker/profile" className="text-purple-600 hover:underline">Upload one here</Link>
-              </p>
+              
+              {/* Upload Section */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 transition-colors">
+                <UploadFile
+                  loading={uploadingResume}
+                  onFileUploaded={handleResumeUpload}
+                  className="max-w-md mx-auto"
+                />
+              </div>
+              
+              {/* Existing Resumes Dropdown */}
+              {resumes.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Or choose from existing resumes
+                  </label>
+                  <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a resume" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resumes.map((resume) => (
+                        <SelectItem key={resume.id} value={resume.id}>
+                          {resume.filename} 
+                          {resume.is_primary && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Primary</span>}
+                          <span className="ml-2 text-xs text-gray-500">
+                            {new Date(resume.uploaded_at).toLocaleDateString()}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {resumes.length === 0 && !uploadingResume && (
+                <p className="text-xs text-gray-500 text-center">
+                  No resumes found. Upload one above to continue.
+                </p>
+              )}
             </div>
 
             {/* Cover Letter Selection */}
@@ -311,12 +439,15 @@ export default function JobDetailPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Use Saved Cover Letter (Optional)
                 </label>
-                <Select value={selectedCoverLetterId} onValueChange={handleCoverLetterSelect}>
+                <Select
+                  value={selectedCoverLetterId}
+                  onValueChange={handleCoverLetterSelect}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a saved cover letter" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None (Write custom)</SelectItem>
+                    <SelectItem value="None">Write custom</SelectItem>
                     {coverLetters.map((cl) => (
                       <SelectItem key={cl.id} value={cl.id}>
                         {cl.title}
@@ -326,6 +457,35 @@ export default function JobDetailPage() {
                 </Select>
               </div>
             )}
+
+            {/* AI Generate Button */}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                onClick={handleGenerateAICoverLetter}
+                disabled={generatingAI}
+                variant="outline"
+                className="flex-1"
+              >
+                {generatingAI ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                {generatingAI ? "Generating..." : "AI Generate Cover Letter"}
+              </Button>
+              
+              {coverLetterText.length > 50 && (
+                <Button
+                  type="button"
+                  onClick={() => setShowSaveDialog(true)}
+                  variant="outline"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Save
+                </Button>
+              )}
+            </div>
 
             {/* Cover Letter Text */}
             <div>
@@ -366,6 +526,53 @@ export default function JobDetailPage() {
                 </>
               ) : (
                 "Submit Application"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save Cover Letter Dialog */}
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Cover Letter</DialogTitle>
+            <DialogDescription>
+              Save this cover letter for future applications
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Title
+            </label>
+            <input
+              type="text"
+              placeholder="e.g., Software Engineer Cover Letter"
+              value={coverLetterTitle}
+              onChange={(e) => setCoverLetterTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              maxLength={200}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowSaveDialog(false)}
+              disabled={savingCoverLetter}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveCoverLetter}
+              disabled={savingCoverLetter}
+            >
+              {savingCoverLetter ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
               )}
             </Button>
           </DialogFooter>
