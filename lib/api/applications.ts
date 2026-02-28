@@ -90,15 +90,15 @@ export async function withdrawApplication(applicationId: string): Promise<Applic
  * Get all applications for a specific job (Employer)
  */
 export async function getJobApplications(
-  jobId: string,
+  job_id: string,
   status?: string,
   minMatchScore?: number
 ): Promise<Application[]> {
   const params: any = {};
   if (status) params.status = status;
-  if (minMatchScore) params.min_match_score = minMatchScore;
+  if (minMatchScore !== undefined && minMatchScore !== null) params.min_match_score = minMatchScore;
 
-  const response = await axiosInstance.get(`/job/${jobId}/applications`, { params });
+  const response = await axiosInstance.get(`/applications/job/${job_id}/applications`, { params });
   return response.data;
 }
 
