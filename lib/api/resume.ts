@@ -1,4 +1,17 @@
-import { axiosInstance } from "@/lib/axios/axios";
+import axiosInstance from "@/lib/axios/axios";
+
+export interface Resume {
+  id: string;
+  filename: string;
+  is_primary: boolean;
+  uploaded_at: string;
+  file_url: string;
+}
+
+export interface ResumesResponse {
+  resumes: Resume[];
+  total: number;
+}
 
 export interface ResumeUploadResponse {
   message: string;
@@ -7,6 +20,10 @@ export interface ResumeUploadResponse {
   profile_completed: boolean;
   next_step?: string;
   extracted_data?: any;
+  error?: string;
+  can_retry?: boolean;
+  instructions?: string;
+  retry_endpoint?: string;
 }
 
 /**
@@ -65,5 +82,44 @@ export async function updateResume(file: File): Promise<ResumeUploadResponse> {
     },
   });
   
+  return response.data;
+}
+
+/**
+ * Get all resumes for the current job seeker
+ * Used in job application modal to let user select which resume to use
+ * Backend endpoint: GET /resume/my-resumes
+ */
+export async function getMyResumes(): Promise<ResumesResponse> {
+  const response = await axiosInstance.get<ResumesResponse>("/resume/my-resumes");
+  return response.data;
+}
+
+/**
+ * Get details of a specific resume
+ * Backend endpoint: GET /resume/{resume_id}
+ */
+export async function getResumeById(resumeId: string): Promise<Resume> {
+  const response = await axiosInstance.get<Resume>(`/resume/${resumeId}`);
+  return response.data;
+}
+
+/**
+ * Delete a resume
+ * Backend endpoint: DELETE /resume/{resume_id}
+ */
+export async function deleteResume(resumeId: string): Promise<{ message: string }> {
+  const response = await axiosInstance.delete<{ message: string }>(`/resume/${resumeId}`);
+  return response.data;
+}
+
+/**
+ * Retry parsing a failed resume
+ * Backend endpoint: POST /resume/{resume_id}/retry-parse
+ */
+export async function retryResumeParsing(resumeId: string): Promise<ResumeUploadResponse> {
+  const response = await axiosInstance.post<ResumeUploadResponse>(
+    `/resume/${resumeId}/retry-parse`
+  );
   return response.data;
 }
