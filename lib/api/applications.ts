@@ -138,3 +138,59 @@ export async function getJobApplicationStats(jobId: string): Promise<Application
   const response = await axiosInstance.get(`/job/${jobId}/stats`);
   return response.data;
 }
+
+
+// ===== ATS SCORING =====
+
+export interface ATSReport {
+  overall_score: number;
+  skill_match_score: number;
+  experience_match_score: number;
+  education_match_score: number;
+  keyword_match_score: number;
+  matched_required_skills: string[];
+  matched_preferred_skills: string[];
+  missing_required_skills: string[];
+  strengths: string[];
+  gaps: string[];
+  recommendation: "STRONG_MATCH" | "GOOD_MATCH" | "PARTIAL_MATCH" | "WEAK_MATCH";
+  summary: string;
+}
+
+export interface BulkATSResult {
+  message: string;
+  total: number;
+  scored: number;
+  failed: number;
+  skipped_no_resume: number;
+}
+
+export interface ATSRankedApplication {
+  application_id: string;
+  applicant_name: string | null;
+  ats_score: number | null;
+  match_score: number;
+  recommendation: string | null;
+  status: ApplicationStatus;
+}
+
+// Trigger bulk ATS scoring for all applications of a job
+export async function bulkATSScore(jobId: string): Promise<BulkATSResult> {
+  const response = await axiosInstance.post(`/applications/job/${jobId}/bulk-ats-score`);
+  return response.data;
+}
+
+// Score a single application
+export async function scoreApplicationATS(applicationId: string): Promise<{ ats_score: number; ats_report: ATSReport }> {
+  const response = await axiosInstance.post(`/applications/${applicationId}/ats-score`);
+  return response.data;
+}
+
+// Get ATS-ranked applications for a job
+export async function getATSRankedApplications(jobId: string, minScore = 0): Promise<{ applications: ATSRankedApplication[]; total: number }> {
+  const response = await axiosInstance.get(`/applications/job/${jobId}/ats-ranked`, {
+    params: { min_score: minScore },
+  });
+  return response.data;
+}
+
