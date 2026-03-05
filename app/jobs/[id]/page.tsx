@@ -41,9 +41,14 @@ import {
   MapPin,
 } from "lucide-react";
 import Link from "next/link";
-import UploadFile from "@/app/signup/comps/UploadFile" // Your existing upload component
-import { reUploadResume } from "@/lib/api/resume"; // Add this import
+import UploadFile from "@/app/signup/comps/UploadFile";
+import { reUploadResume } from "@/lib/api/resume";
 
+// ✅ NEW: Import CommuteScore
+import CommuteScore from "@/components/CommuteScore";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const token = localStorage.getItem("access_token");
 
 export default function JobDetailPage() {
   const params = useParams();
@@ -55,6 +60,9 @@ export default function JobDetailPage() {
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [applying, setApplying] = useState(false);
 
+  // ✅ NEW: State for user's location
+  const [userLocation, setUserLocation] = useState<string | undefined>(undefined);
+
   // Application form state
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState("");
@@ -63,10 +71,10 @@ export default function JobDetailPage() {
   const [selectedCoverLetterId, setSelectedCoverLetterId] = useState("");
   const [uploadingResume, setUploadingResume] = useState(false);
   const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
-  
+
   // AI generation state
   const [generatingAI, setGeneratingAI] = useState(false);
-  
+
   // Save cover letter state
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [coverLetterTitle, setCoverLetterTitle] = useState("");
@@ -74,6 +82,7 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     fetchJobDetails();
+    fetchUserLocation(); // ✅ NEW
   }, [jobId]);
 
   async function fetchJobDetails() {
@@ -89,19 +98,39 @@ export default function JobDetailPage() {
     }
   }
 
+  // ✅ NEW: Fetch the job seeker's location from their profile
+  async function fetchUserLocation() {
+    try {
+      const token = localStorage.getItem("access_token");
+
+      const res = await fetch(`${API_BASE}/auth/me/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      if (data.role === "jobseeker" && data.profile?.location) {
+        setUserLocation(data.profile.location);
+      }
+    } catch {
+      // silent fail
+    }
+  }
+
   async function openApplyModal() {
     try {
-      // Fetch user's resumes
       const resumesData = await getMyResumes();
       setResumes(resumesData.resumes);
-      
-      // Set primary resume as default
+
       const primaryResume = resumesData.resumes.find((r) => r.is_primary);
       if (primaryResume) {
         setSelectedResumeId(primaryResume.id);
       }
 
-      // Fetch user's cover letters
       const letters = await getCoverLetters();
       setCoverLetters(letters);
 
@@ -114,21 +143,19 @@ export default function JobDetailPage() {
 
   async function handleResumeUpload(file: File) {
     if (!file) return;
-    
+
     try {
       setUploadingResume(true);
       const result = await reUploadResume(file);
       toast.success(result.message || "Resume uploaded successfully!");
-      
-      // Refresh resumes list and select the new one
+
       const resumesData = await getMyResumes();
       setResumes(resumesData.resumes);
-      
-      // Set the newly uploaded resume as selected (it should be primary)
+
       const primaryResume = resumesData.resumes.find((r) => r.is_primary);
       if (primaryResume) {
         setSelectedResumeId(primaryResume.id);
-        setNewResumeFile(null); // Clear the temp file
+        setNewResumeFile(null);
       }
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || "Failed to upload resume");
@@ -154,7 +181,7 @@ export default function JobDetailPage() {
       setGeneratingAI(true);
       const result = await generateCoverLetter(jobId);
       setCoverLetterText(result.cover_letter);
-      setSelectedCoverLetterId(""); // Clear saved letter selection
+      setSelectedCoverLetterId("");
       toast.success("AI cover letter generated!");
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || "Failed to generate cover letter");
@@ -178,8 +205,7 @@ export default function JobDetailPage() {
       toast.success("Cover letter saved!");
       setShowSaveDialog(false);
       setCoverLetterTitle("");
-      
-      // Refresh cover letters list
+
       const letters = await getCoverLetters();
       setCoverLetters(letters);
     } catch (error: any) {
@@ -357,7 +383,7 @@ export default function JobDetailPage() {
 
         {/* Preferred Skills */}
         {job.preferred_skills.length > 0 && (
-          <Card>
+          <Card className="mb-6">
             <CardHeader>
               <CardTitle>Preferred Skills</CardTitle>
             </CardHeader>
@@ -372,9 +398,25 @@ export default function JobDetailPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* ✅ NEW: Commute Score — placed after skills, before the end */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Commute Estimate</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CommuteScore
+              jobLocation={job.location}
+              workMode={job.work_mode}
+              jobType={job.job_type}
+              userLocation={userLocation}
+            />
+          </CardContent>
+        </Card>
+
       </div>
 
-      {/* Apply Modal */}
+      {/* Apply Modal — unchanged */}
       <Dialog open={isApplyModalOpen} onOpenChange={setIsApplyModalOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -385,13 +427,11 @@ export default function JobDetailPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Resume Selection + Upload */}
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Resume <span className="text-red-500">*</span>
               </label>
-              
-              {/* Upload Section */}
+
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 transition-colors">
                 <UploadFile
                   loading={uploadingResume}
@@ -399,8 +439,7 @@ export default function JobDetailPage() {
                   className="max-w-md mx-auto"
                 />
               </div>
-              
-              {/* Existing Resumes Dropdown */}
+
               {resumes.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
@@ -414,8 +453,12 @@ export default function JobDetailPage() {
                     <SelectContent>
                       {resumes.map((resume) => (
                         <SelectItem key={resume.id} value={resume.id}>
-                          {resume.filename} 
-                          {resume.is_primary && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Primary</span>}
+                          {resume.filename}
+                          {resume.is_primary && (
+                            <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                              Primary
+                            </span>
+                          )}
                           <span className="ml-2 text-xs text-gray-500">
                             {new Date(resume.uploaded_at).toLocaleDateString()}
                           </span>
@@ -425,7 +468,7 @@ export default function JobDetailPage() {
                   </Select>
                 </div>
               )}
-              
+
               {resumes.length === 0 && !uploadingResume && (
                 <p className="text-xs text-gray-500 text-center">
                   No resumes found. Upload one above to continue.
@@ -433,7 +476,6 @@ export default function JobDetailPage() {
               )}
             </div>
 
-            {/* Cover Letter Selection */}
             {coverLetters.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -458,7 +500,6 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            {/* AI Generate Button */}
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -474,7 +515,7 @@ export default function JobDetailPage() {
                 )}
                 {generatingAI ? "Generating..." : "AI Generate Cover Letter"}
               </Button>
-              
+
               {coverLetterText.length > 50 && (
                 <Button
                   type="button"
@@ -487,7 +528,6 @@ export default function JobDetailPage() {
               )}
             </div>
 
-            {/* Cover Letter Text */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Cover Letter (Optional)
@@ -532,7 +572,7 @@ export default function JobDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Save Cover Letter Dialog */}
+      {/* Save Cover Letter Dialog — unchanged */}
       <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
         <DialogContent>
           <DialogHeader>
@@ -562,10 +602,7 @@ export default function JobDetailPage() {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleSaveCoverLetter}
-              disabled={savingCoverLetter}
-            >
+            <Button onClick={handleSaveCoverLetter} disabled={savingCoverLetter}>
               {savingCoverLetter ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

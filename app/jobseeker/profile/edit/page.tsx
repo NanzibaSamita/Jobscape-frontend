@@ -20,6 +20,9 @@ import { Loader2, Upload, X, Plus, Trash2, Save, ArrowLeft, User } from "lucide-
 import Link from "next/link";
 import Image from "next/image";
 
+// ✅ NEW: Import the autocomplete component
+import LocationAutocomplete from "@/components/ui/LocationAutocomplete";
+
 export default function ProfileEditPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<JobSeekerProfile | null>(null);
@@ -27,7 +30,6 @@ export default function ProfileEditPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Form state
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
@@ -47,19 +49,20 @@ export default function ProfileEditPage() {
 
   async function fetchProfile() {
     try {
-        setLoading(true);
-        
-        // ✅ Check if token exists first
-        const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
-        if (!token) {
+      setLoading(true);
+
+      const token =
+        localStorage.getItem("access_token") ||
+        sessionStorage.getItem("access_token");
+      if (!token) {
         router.push("/login");
         return;
-        }
-        
-        const data = await getUserProfile();
-        const prof = data.profile as JobSeekerProfile;
-        setProfile(prof);
-        setFormData({
+      }
+
+      const data = await getUserProfile();
+      const prof = data.profile as JobSeekerProfile;
+      setProfile(prof);
+      setFormData({
         full_name: prof.full_name || "",
         phone: prof.phone || "",
         location: prof.location || "",
@@ -67,21 +70,20 @@ export default function ProfileEditPage() {
         linkedin_url: prof.linkedin_url || "",
         github_url: prof.github_url || "",
         portfolio_url: prof.portfolio_url || "",
-        });
-        setSkills(prof.skills || []);
+      });
+      setSkills(prof.skills || []);
     } catch (error: any) {
-        toast.error(error?.response?.data?.detail || "Failed to load profile");
-        router.push("/login");  // ✅ Redirect on error
+      toast.error(error?.response?.data?.detail || "Failed to load profile");
+      router.push("/login");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-    }
+  }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("Image size must be less than 5MB");
       return;
@@ -91,7 +93,6 @@ export default function ProfileEditPage() {
       setUploadingImage(true);
       const result = await uploadProfilePicture(file);
       toast.success("Profile picture uploaded successfully");
-      // Update local state
       if (profile) {
         setProfile({ ...profile, profile_picture_url: result.url });
       }
@@ -168,7 +169,9 @@ export default function ProfileEditPage() {
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Edit Profile</h1>
-              <p className="text-gray-600 mt-1">Update your personal and professional information</p>
+              <p className="text-gray-600 mt-1">
+                Update your personal and professional information
+              </p>
             </div>
           </div>
           <Button
@@ -220,7 +223,12 @@ export default function ProfileEditPage() {
 
               <div className="flex-1 space-y-2">
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="relative" disabled={uploadingImage}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="relative"
+                    disabled={uploadingImage}
+                  >
                     <Upload className="h-4 w-4 mr-2" />
                     {profile?.profile_picture_url ? "Change" : "Upload"}
                     <input
@@ -260,13 +268,15 @@ export default function ProfileEditPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="fullname">
+              <Label htmlFor="full_name">
                 Full Name <span className="text-red-500">*</span>
               </Label>
               <Input
-                id="fullname"
-                value={formData.fullname}
-                onChange={(e) => setFormData({ ...formData, fullname: e.target.value })}
+                id="full_name"
+                value={formData.full_name}
+                onChange={(e) =>
+                  setFormData({ ...formData, full_name: e.target.value })
+                }
                 placeholder="John Doe"
                 required
               />
@@ -279,17 +289,22 @@ export default function ProfileEditPage() {
                   id="phone"
                   type="tel"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
                   placeholder="+880 1XXX-XXXXXX"
                 />
               </div>
 
+              {/* ✅ CHANGED: Replaced plain Input with LocationAutocomplete */}
               <div>
                 <Label htmlFor="location">Location</Label>
-                <Input
+                <LocationAutocomplete
                   id="location"
                   value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  onChange={(val) =>
+                    setFormData({ ...formData, location: val })
+                  }
                   placeholder="Dhaka, Bangladesh"
                 />
               </div>
@@ -300,7 +315,12 @@ export default function ProfileEditPage() {
               <Textarea
                 id="summary"
                 value={formData.professional_summary}
-                onChange={(e) => setFormData({ ...formData, professional_summary: e.target.value })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    professional_summary: e.target.value,
+                  })
+                }
                 placeholder="Brief summary of your professional background and goals..."
                 rows={4}
                 maxLength={500}
@@ -322,7 +342,9 @@ export default function ProfileEditPage() {
               <Input
                 value={newSkill}
                 onChange={(e) => setNewSkill(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
+                onKeyPress={(e) =>
+                  e.key === "Enter" && (e.preventDefault(), addSkill())
+                }
                 placeholder="Add a skill (e.g., JavaScript, Python)"
               />
               <Button onClick={addSkill} type="button">
@@ -368,7 +390,9 @@ export default function ProfileEditPage() {
                 id="linkedin"
                 type="url"
                 value={formData.linkedin_url}
-                onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, linkedin_url: e.target.value })
+                }
                 placeholder="https://linkedin.com/in/yourprofile"
               />
             </div>
@@ -379,7 +403,9 @@ export default function ProfileEditPage() {
                 id="github"
                 type="url"
                 value={formData.github_url}
-                onChange={(e) => setFormData({ ...formData, github_url: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, github_url: e.target.value })
+                }
                 placeholder="https://github.com/yourusername"
               />
             </div>
@@ -390,7 +416,9 @@ export default function ProfileEditPage() {
                 id="portfolio"
                 type="url"
                 value={formData.portfolio_url}
-                onChange={(e) => setFormData({ ...formData, portfolio_url: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, portfolio_url: e.target.value })
+                }
                 placeholder="https://yourportfolio.com"
               />
             </div>

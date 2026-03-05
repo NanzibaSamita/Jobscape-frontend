@@ -55,7 +55,7 @@ interface ApplicationDetails {
     education: any[];
     certifications: any[];
     languages: any[];
-    portfolio_links: string[];
+    portfolio_url: string[];
   };
   resume: {
     id: string;
@@ -341,14 +341,14 @@ export default function ApplicationDetailModal({
             )}
 
             {/* Portfolio Links */}
-            {job_seeker.portfolio_links && job_seeker.portfolio_links.length > 0 && (
+            {job_seeker.portfolio_url && job_seeker.portfolio_url.length > 0 && (
               <section>
                 <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                   <LinkIcon className="h-5 w-5" />
                   Portfolio & Links
                 </h3>
                 <div className="space-y-2">
-                  {job_seeker.portfolio_links.map((link: string, idx: number) => (
+                  {job_seeker.portfolio_url.map((link: string, idx: number) => (
                     <a 
                       key={idx}
                       href={link}
