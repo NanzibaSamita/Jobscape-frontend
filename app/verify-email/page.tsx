@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { axiosInstance } from "@/lib/axios/axios";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 export default function VerifyEmailPage() {
   const params = useSearchParams();
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   const emailParam = params.get("email");
   const token = params.get("token"); // backward-compat: old emails may still link here
@@ -30,20 +32,28 @@ export default function VerifyEmailPage() {
 
   const resendVerification = async () => {
     if (!email) {
-      toast.error("Missing email address. Please go back to signup and try again.");
+      dispatch(showAlert({
+        title: "Missing Email",
+        message: "Missing email address. Please go back to signup and try again.",
+        type: "error"
+      }));
       return;
     }
 
     setLoading(true);
     try {
       const res = await axiosInstance.post("/auth/verify-email/request", { email });
-      toast.success(res.data?.message || "Verification email sent again.");
+      dispatch(showAlert({
+        title: "Success",
+        message: res.data?.message || "Verification email sent again.",
+        type: "success"
+      }));
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.detail ||
-          err?.response?.data?.message ||
-          "Failed to resend verification email."
-      );
+      dispatch(showAlert({
+        title: "Error",
+        message: err?.response?.data?.detail || err?.response?.data?.message || "Failed to resend verification email.",
+        type: "error"
+      }));
     } finally {
       setLoading(false);
     }

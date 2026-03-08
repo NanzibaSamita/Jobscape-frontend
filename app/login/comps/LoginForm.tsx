@@ -6,8 +6,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { AxiosError } from "axios";
-import { toast } from "react-toastify";
 import { Eye, EyeOff, Loader, Loader2 } from "lucide-react";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export default function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   // ✅ FIXED: Only redirect if user has valid token and NO redirect param
   useEffect(() => {
@@ -164,7 +166,11 @@ export default function LoginForm() {
       const token = loginRes?.data?.access_token;
 
       if (!token) {
-        toast.error("Login failed: missing access token from server.");
+        dispatch(showAlert({
+          title: "Login Failed",
+          message: "Missing access token from server.",
+          type: "error"
+        }));
         return;
       }
 
@@ -191,7 +197,11 @@ export default function LoginForm() {
         }
       }
 
-      toast.error(detail);
+      dispatch(showAlert({
+        title: "Login Error",
+        message: detail,
+        type: "error"
+      }));
     } finally {
       setLoading(false);
     }

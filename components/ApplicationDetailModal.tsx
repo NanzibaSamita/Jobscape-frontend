@@ -18,10 +18,20 @@ import {
   Download,
   Loader2,
   FileText,
-  TrendingUp
+  TrendingUp,
+  MessageSquare,
+  Filter,
+  Search,
+  AlertCircle,
+  Star,
+  ArrowRight,
+  Megaphone,
+  Video,
+  CheckCircle2
 } from 'lucide-react';
 import axiosInstance from '@/lib/axios/axios';
-import { toast } from 'react-toastify';
+import { useAppDispatch } from '@/lib/store';
+import { showAlert } from '@/lib/store/slices/notificationSlice';
 
 interface ApplicationDetailModalProps {
   applicationId: string;
@@ -36,6 +46,9 @@ interface ApplicationDetails {
     status: string;
     cover_letter: string | null;
     applied_at: string;
+    ats_score?: number;
+    ats_report?: any;
+    current_round: number;
     skills_match: {
       matched_required: string[];
       matched_preferred: string[];
@@ -73,6 +86,8 @@ export default function ApplicationDetailModal({
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<ApplicationDetails | null>(null);
   const [resumeLoading, setResumeLoading] = useState(false);
+  const [startingInterview, setStartingInterview] = useState(false);
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
     if (isOpen && applicationId) {
@@ -87,7 +102,7 @@ export default function ApplicationDetailModal({
       setDetails(response.data);
     } catch (error: any) {
       console.error('Failed to load details:', error);
-      toast.error('Failed to load application details');
+      // axios interceptor handles showAlert, but we still need to close modal
       onClose();
     } finally {
       setLoading(false);
@@ -97,6 +112,33 @@ export default function ApplicationDetailModal({
   const downloadResume = () => {
     if (details?.resume?.file_url) {
       window.open(details.resume.file_url, '_blank');
+    }
+  };
+
+  const handleStartInterview = async () => {
+    if (!applicationId) return;
+    try {
+      setStartingInterview(true);
+      const res = await axiosInstance.get(`/interviews/application/${applicationId}`);
+      const schedule = res.data;
+      
+      if (!schedule?.schedule_id) throw new Error("No active interview schedule found");
+
+      await axiosInstance.post(`/interviews/${schedule.schedule_id}/start`);
+      
+      dispatch(showAlert({
+        title: "Interview Started",
+        message: "Candidate has been notified and invitation sent.",
+        type: "success"
+      }));
+    } catch (err: any) {
+      dispatch(showAlert({
+        title: "Error starting interview",
+        message: err?.response?.data?.detail || err.message || "Failed to notify candidate",
+        type: "error"
+      }));
+    } finally {
+      setStartingInterview(false);
     }
   };
 
@@ -135,6 +177,17 @@ export default function ApplicationDetailModal({
               <span className="text-sm text-muted-foreground">
                 Applied {new Date(application.applied_at).toLocaleDateString()}
               </span>
+              {application.status === 'INTERVIEW_SCHEDULED' && (
+                <Button 
+                  size="sm" 
+                  onClick={handleStartInterview} 
+                  disabled={startingInterview}
+                  className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white w-full"
+                >
+                  {startingInterview ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <Video className="h-3.5 w-3.5 mr-2" />}
+                  Start Interview
+                </Button>
+              )}
             </div>
           </div>
         </DialogHeader>
@@ -174,12 +227,67 @@ export default function ApplicationDetailModal({
               </div>
             </section>
 
+            {/* AI Analysis & Feedback */}
+            {application.ats_report && (
+              <section className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/10 dark:to-purple-900/10 rounded-xl border border-violet-100 dark:border-violet-800/50 p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="h-8 w-8 rounded-full bg-violet-600 flex items-center justify-center">
+                    <TrendingUp className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-violet-900 dark:text-violet-100">AI ATS Insight</h3>
+                    <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Automated resume & profile evaluation</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <div className="bg-white dark:bg-zinc-900/50 rounded-lg p-3 border border-violet-100 dark:border-violet-800">
+                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-semibold">ATS Score</p>
+                    <p className="text-2xl font-bold text-violet-700">{application.ats_score}%</p>
+                  </div>
+                  <div className="col-span-2 bg-white dark:bg-zinc-900/50 rounded-lg p-3 border border-violet-100 dark:border-violet-800">
+                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-semibold">AI Recommendation</p>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {application.ats_report.recommendation || "Highly suitable for technical rounds."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-violet-800 dark:text-violet-300 flex items-center gap-1.5 mb-2">
+                      <CheckCircle2 className="h-4 w-4" /> Strong Aspects
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {application.ats_report.strengths?.map((s: string, i: number) => (
+                        <span key={i} className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md border border-emerald-100">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-violet-800 dark:text-violet-300 flex items-center gap-1.5 mb-2">
+                      <AlertCircle className="h-4 w-4" /> Areas for Improvement
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {application.ats_report.gaps?.map((g: string, i: number) => (
+                        <span key={i} className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-md border border-amber-100">
+                          {g}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Skills Match */}
             {application.skills_match && (
               <section>
                 <h3 className="text-lg font-semibold mb-3">Skills Match Analysis</h3>
                 <div className="space-y-3">
-                  {application.skills_match.matched_required.length > 0 && (
+                  {application.skills_match.matched_required?.length > 0 && (
                     <div>
                       <p className="text-sm text-muted-foreground mb-2">Matched Required Skills</p>
                       <div className="flex flex-wrap gap-2">
@@ -191,7 +299,7 @@ export default function ApplicationDetailModal({
                       </div>
                     </div>
                   )}
-                  {application.skills_match.matched_preferred.length > 0 && (
+                  {application.skills_match.matched_preferred?.length > 0 && (
                     <div>
                       <p className="text-sm text-muted-foreground mb-2">Matched Preferred Skills</p>
                       <div className="flex flex-wrap gap-2">
@@ -203,7 +311,7 @@ export default function ApplicationDetailModal({
                       </div>
                     </div>
                   )}
-                  {application.skills_match.missing_required.length > 0 && (
+                  {application.skills_match.missing_required?.length > 0 && (
                     <div>
                       <p className="text-sm text-muted-foreground mb-2">Missing Required Skills</p>
                       <div className="flex flex-wrap gap-2">

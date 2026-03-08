@@ -4,7 +4,8 @@
 
 import { useEffect, useState } from "react";
 import { Calendar, Clock, MapPin, Video, Phone, Users, Award, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
-import { useNotify } from "@/components/ui/AppNotification";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -53,7 +54,7 @@ function formatDateTime(iso: string) {
 }
 
 export default function InterviewsPage() {
-  const notify = useNotify();
+  const dispatch = useAppDispatch();
   const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -70,7 +71,11 @@ export default function InterviewsPage() {
       if (!res.ok) throw new Error();
       setInterviews(await res.json());
     } catch {
-      notify.error("Failed to load interviews");
+      dispatch(showAlert({
+        title: "Load Error",
+        message: "Failed to load interviews",
+        type: "error"
+      }));
     } finally {
       setLoading(false);
     }
@@ -79,7 +84,11 @@ export default function InterviewsPage() {
   async function confirmSlot(scheduleId: string) {
     const slotIndex = selectedSlots[scheduleId];
     if (slotIndex === undefined) {
-      notify.warning("Select a time slot", "Please choose your preferred time before confirming");
+      dispatch(showAlert({
+        title: "Select a time slot",
+        message: "Please choose your preferred time before confirming",
+        type: "warning"
+      }));
       return;
     }
     setConfirming(scheduleId);
@@ -95,10 +104,18 @@ export default function InterviewsPage() {
         }),
       });
       if (!res.ok) throw new Error((await res.json()).detail);
-      notify.success("Interview confirmed!", "The employer has been notified of your chosen time.");
+      dispatch(showAlert({
+        title: "Interview confirmed!",
+        message: "The employer has been notified of your chosen time.",
+        type: "success"
+      }));
       loadInterviews();
     } catch (err: any) {
-      notify.error("Confirmation failed", err.message);
+      dispatch(showAlert({
+        title: "Confirmation failed",
+        message: err.message,
+        type: "error"
+      }));
     } finally {
       setConfirming(null);
     }

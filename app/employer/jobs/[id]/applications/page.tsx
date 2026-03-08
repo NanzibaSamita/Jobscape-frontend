@@ -12,6 +12,7 @@ import {
   MapPin, Phone
 } from "lucide-react";
 import { getJobApplications, updateApplicationStatus, type ApplicationStatus } from "@/lib/api/applications";
+import { axiosInstance } from "@/lib/axios/axios";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import ApplicationDetailModal from "@/components/ApplicationDetailModal";
-import { useNotify } from "@/components/ui/AppNotification";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -34,6 +36,9 @@ interface Application {
   applied_at: string;
   applicant_name?: string;
   applicant_email?: string;
+  ats_score?: number;
+  ats_report?: any;
+  current_round: number;
 }
 
 type FilterType = ApplicationStatus | "ALL";
@@ -74,33 +79,77 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
+function ATSBadge({ score }: { score: number | undefined }) {
+  if (score === undefined || score === null) return null;
+  const color = score >= 85 ? "text-emerald-700 bg-emerald-50 border-emerald-200" : score >= 70 ? "text-blue-700 bg-blue-50 border-blue-200" : "text-amber-700 bg-amber-50 border-amber-200";
+  return (
+    <Badge variant="outline" className={`${color} font-bold`}>
+      ATS: {score}%
+    </Badge>
+  );
+}
+
 // ─── Broadcast Modal ─────────────────────────────────────────────────────────
 
-function BroadcastModal({ jobId, open, onClose, notify }: { jobId: string; open: boolean; onClose: () => void; notify: any }) {
+function BroadcastModal({ jobId, open, onClose }: { jobId: string; open: boolean; onClose: () => void }) {
+  const dispatch = useAppDispatch();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(["SHORTLISTED"]);
   const [sending, setSending] = useState(false);
+
+  const BROADCAST_STATUSES = [
+    { value: "PENDING", label: "Pending" },
+    { value: "REVIEWED", label: "Reviewed" },
+    { value: "SHORTLISTED", label: "Shortlisted" },
+    { value: "INTERVIEW_SCHEDULED", label: "Interview" },
+    { value: "ACCEPTED", label: "Accepted" },
+  ];
+
+  function toggleStatus(status: string) {
+    setSelectedStatuses(prev => 
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  }
 
   async function handleSend() {
     if (!subject.trim() || !message.trim()) {
-      notify.warning("Missing fields", "Please fill in both subject and message");
+      dispatch(showAlert({
+        title: "Missing fields",
+        message: "Please fill in both subject and message",
+        type: "warning"
+      }));
       return;
     }
+    if (selectedStatuses.length === 0) {
+      dispatch(showAlert({
+        title: "No target selected",
+        message: "Please select at least one application stage",
+        type: "warning"
+      }));
+      return;
+    }
+
     setSending(true);
     try {
-      const res = await fetch(`${API_BASE}/interviews/broadcast`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ job_id: jobId, subject, message, send_email: true, send_notification: true }),
+      const payloadMessage = subject ? `**${subject}**\n\n${message}` : message;
+      const res = await axiosInstance.post(`/chat/job/${jobId}/bulk-message`, {
+        message: payloadMessage,
+        statuses: selectedStatuses
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      notify.success("Message sent!", `Delivered to ${data.recipients_count} shortlisted candidate(s)`);
+      dispatch(showAlert({
+        title: "Message sent!",
+        message: `Delivered to ${res.data.sent_count} candidate(s)`,
+        type: "success"
+      }));
       onClose();
       setSubject(""); setMessage("");
     } catch (err: any) {
-      notify.error("Failed to send", err.message);
+      dispatch(showAlert({
+        title: "Failed to send",
+        message: err?.response?.data?.detail || err.message,
+        type: "error"
+      }));
     } finally {
       setSending(false);
     }
@@ -112,13 +161,32 @@ function BroadcastModal({ jobId, open, onClose, notify }: { jobId: string; open:
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Megaphone className="h-5 w-5 text-violet-600" />
-            Broadcast to Shortlisted Candidates
+            Targeted Announcement
           </DialogTitle>
           <DialogDescription>
-            Send a message to all shortlisted candidates via email and in-app notification.
+            Send a message to candidates in specific stages via email and in-app notification.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1.5">Target Stages</label>
+            <div className="flex flex-wrap gap-2">
+              {BROADCAST_STATUSES.map(s => (
+                <button
+                  key={s.value}
+                  onClick={() => toggleStatus(s.value)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border
+                    ${selectedStatuses.includes(s.value)
+                      ? "bg-violet-600 text-white border-violet-600"
+                      : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300 dark:bg-gray-800 dark:border-gray-700"
+                    }`}
+                >
+                  {selectedStatuses.includes(s.value) && "✓ "}
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1.5">Subject</label>
             <Input placeholder="e.g. Next Steps for Your Application" value={subject} onChange={e => setSubject(e.target.value)} />
@@ -126,7 +194,7 @@ function BroadcastModal({ jobId, open, onClose, notify }: { jobId: string; open:
           <div>
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1.5">Message</label>
             <Textarea
-              placeholder="Write your message to all shortlisted candidates..."
+              placeholder="Write your announcement message..."
               value={message}
               onChange={e => setMessage(e.target.value)}
               rows={6}
@@ -134,18 +202,85 @@ function BroadcastModal({ jobId, open, onClose, notify }: { jobId: string; open:
             />
             <p className="text-xs text-gray-400 mt-1">{message.length} / 5000</p>
           </div>
-          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
-            <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
-              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              This message will be sent to all candidates currently with SHORTLISTED status. It cannot be undone.
-            </p>
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={sending}>Cancel</Button>
           <Button onClick={handleSend} disabled={sending} className="bg-violet-600 hover:bg-violet-700 text-white">
             {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-            Send to All Shortlisted
+            Send Announcement
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Bulk Shortlist Modal ────────────────────────────────────────────────────
+
+function BulkShortlistModal({ jobId, open, onClose, onSuccess }: { jobId: string; open: boolean; onClose: () => void; onSuccess: () => void; }) {
+  const dispatch = useAppDispatch();
+  const [threshold, setThreshold] = useState<number>(70);
+  const [processing, setProcessing] = useState(false);
+
+  async function handleExecute() {
+    setProcessing(true);
+    try {
+      const res = await axiosInstance.post(`/applications/job/${jobId}/bulk-shortlist`, {
+        ats_threshold: threshold
+      });
+      dispatch(showAlert({
+        title: "Bulk shortlisting complete!",
+        message: `Shortlisted ${res.data.shortlisted} candidates, rejected ${res.data.rejected}.`,
+        type: "success"
+      }));
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      dispatch(showAlert({
+        title: "Execution failed",
+        message: err?.response?.data?.detail || err.message,
+        type: "error"
+      }));
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Star className="h-5 w-5 text-violet-600" />
+            Auto-Shortlist Candidates
+          </DialogTitle>
+          <DialogDescription>
+            Automatically shortlist or reject PENDING applications based on their ATS score.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1.5">ATS Minimum Threshold (%)</label>
+            <div className="flex items-center gap-4">
+              <input 
+                type="range" 
+                min="0" max="100" 
+                value={threshold} 
+                onChange={e => setThreshold(parseInt(e.target.value))} 
+                className="flex-1 accent-violet-600 cursor-pointer"
+              />
+              <span className="font-bold text-violet-700 w-12">{threshold}%</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            Candidates meeting or exceeding this threshold will be shortlisted and invited to the first round. Others will receive a standard rejection email.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={processing}>Cancel</Button>
+          <Button onClick={handleExecute} disabled={processing} className="bg-violet-600 hover:bg-violet-700 text-white">
+            {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+            Execute Auto-Shortlist
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -163,9 +298,10 @@ const STYLES = [
   { value: "panel", label: "Panel", icon: Users },
 ];
 
-function InterviewModal({ applicationId, open, onClose, notify, onSuccess }: {
-  applicationId: string; open: boolean; onClose: () => void; notify: any; onSuccess: () => void;
+function InterviewModal({ applicationId, open, onClose, onSuccess }: {
+  applicationId: string; open: boolean; onClose: () => void; onSuccess: () => void;
 }) {
+  const dispatch = useAppDispatch();
   const [style, setStyle] = useState("in_person");
   const [slots, setSlots] = useState([{ datetime: "", duration: 60 }]);
   const [location, setLocation] = useState("");
@@ -187,7 +323,11 @@ function InterviewModal({ applicationId, open, onClose, notify, onSuccess }: {
   async function handleSchedule() {
     const validSlots = slots.filter(s => s.datetime);
     if (!validSlots.length) {
-      notify.warning("Add at least one time slot");
+      dispatch(showAlert({
+        title: "Validation Error",
+        message: "Add at least one time slot",
+        type: "warning"
+      }));
       return;
     }
     setSending(true);
@@ -208,11 +348,19 @@ function InterviewModal({ applicationId, open, onClose, notify, onSuccess }: {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
-      notify.success("Interview scheduled!", "The candidate has been notified via email");
+      dispatch(showAlert({
+        title: "Interview scheduled!",
+        message: "The candidate has been notified via email",
+        type: "success"
+      }));
       onClose();
       onSuccess();
     } catch (err: any) {
-      notify.error("Failed to schedule", err.message);
+      dispatch(showAlert({
+        title: "Failed to schedule",
+        message: err.message,
+        type: "error"
+      }));
     } finally {
       setSending(false);
     }
@@ -231,15 +379,16 @@ function InterviewModal({ applicationId, open, onClose, notify, onSuccess }: {
           {/* Style picker */}
           <div>
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">Interview Style</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid grid-cols-3 gap-2 ${allowStyleChoice ? "opacity-50 pointer-events-none" : ""}`}>
               {STYLES.map(s => {
                 const Icon = s.icon;
                 return (
                   <button
                     key={s.value}
                     onClick={() => setStyle(s.value)}
+                    disabled={allowStyleChoice}
                     className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-all
-                      ${style === s.value
+                      ${style === s.value && !allowStyleChoice
                         ? "border-purple-500 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
                         : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
                       }`}
@@ -332,7 +481,7 @@ export default function JobApplicationsPage() {
   const params = useParams();
   const router = useRouter();
   const jobId = params.id as string;
-  const notify = useNotify();
+  const dispatch = useAppDispatch();
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
@@ -340,21 +489,62 @@ export default function JobApplicationsPage() {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [shortlistOpen, setShortlistOpen] = useState(false);
   const [interviewTarget, setInterviewTarget] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [minAtsScore, setMinAtsScore] = useState<number>(0);
+  const [selectionProcess, setSelectionProcess] = useState<any>(null);
+  const [startingInterview, setStartingInterview] = useState<string | null>(null);
 
-  useEffect(() => { loadApplications(); }, [jobId, filter]);
+  useEffect(() => { 
+    loadApplications(); 
+    loadSelectionProcess();
+  }, [jobId, filter, minAtsScore]);
+
+  async function loadSelectionProcess() {
+    try {
+      const res = await axiosInstance.get(`/selection/job/${jobId}`);
+      setSelectionProcess(res.data);
+    } catch (err) {
+      console.error("No selection process found for this job");
+    }
+  }
 
   async function loadApplications() {
     try {
       setLoading(true);
       const statusFilter = filter !== "ALL" ? filter : undefined;
-      const data = await getJobApplications(jobId, statusFilter);
+      const data = await getJobApplications(jobId, statusFilter, undefined, minAtsScore > 0 ? minAtsScore : undefined);
       setApplications(data as Application[]);
     } catch (err: any) {
-      notify.error("Failed to load applications", err?.response?.data?.detail);
+      dispatch(showAlert({
+        title: "Load Error",
+        message: err?.response?.data?.detail || "Failed to load applications",
+        type: "error"
+      }));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAdvance(applicationId: string) {
+    try {
+      setUpdatingStatus(applicationId);
+      await axiosInstance.post(`/applications/${applicationId}/advance`);
+      dispatch(showAlert({
+        title: "Candidate Advanced",
+        message: "Moving to the next selection round",
+        type: "success"
+      }));
+      loadApplications();
+    } catch (err: any) {
+      dispatch(showAlert({
+        title: "Failed to advance",
+        message: err?.response?.data?.detail || "Please try again",
+        type: "error"
+      }));
+    } finally {
+      setUpdatingStatus(null);
     }
   }
 
@@ -362,12 +552,48 @@ export default function JobApplicationsPage() {
     try {
       setUpdatingStatus(applicationId);
       await updateApplicationStatus(applicationId, { status: newStatus });
-      if (!silent) notify.success("Status updated", `Application marked as ${STATUS_CONFIG[newStatus]?.label}`);
+      if (!silent) {
+        dispatch(showAlert({
+          title: "Status updated",
+          message: `Application marked as ${STATUS_CONFIG[newStatus]?.label}`,
+          type: "success"
+        }));
+      }
       loadApplications();
     } catch (err: any) {
-      notify.error("Failed to update", err?.response?.data?.detail || "Please try again");
+      dispatch(showAlert({
+        title: "Failed to update",
+        message: err?.response?.data?.detail || "Please try again",
+        type: "error"
+      }));
     } finally {
       setUpdatingStatus(null);
+    }
+  }
+
+  async function handleStartInterview(applicationId: string) {
+    try {
+      setStartingInterview(applicationId);
+      const res = await axiosInstance.get(`/interviews/application/${applicationId}`);
+      const schedule = res.data;
+      
+      if (!schedule?.schedule_id) throw new Error("No active interview schedule found");
+
+      await axiosInstance.post(`/interviews/${schedule.schedule_id}/start`);
+      
+      dispatch(showAlert({
+        title: "Interview Started",
+        message: "Candidate has been notified and invitation sent.",
+        type: "success"
+      }));
+    } catch (err: any) {
+      dispatch(showAlert({
+        title: "Error starting interview",
+        message: err?.response?.data?.detail || err.message || "Failed to notify candidate",
+        type: "error"
+      }));
+    } finally {
+      setStartingInterview(null);
     }
   }
 
@@ -408,16 +634,24 @@ export default function JobApplicationsPage() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Applications Pipeline</h1>
             <p className="text-gray-500 text-sm mt-1">Manage and progress your candidates through the hiring pipeline</p>
           </div>
-          {shortlistedCount > 0 && (
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShortlistOpen(true)}
+              variant="outline"
+              className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400"
+            >
+              <Award className="h-4 w-4 mr-2" />
+              Auto-Shortlist
+            </Button>
             <Button
               onClick={() => setBroadcastOpen(true)}
               variant="outline"
               className="border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400"
             >
               <Megaphone className="h-4 w-4 mr-2" />
-              Message Shortlisted ({shortlistedCount})
+              Group Message
             </Button>
-          )}
+          </div>
         </div>
 
         {/* Pipeline Stats */}
@@ -446,6 +680,20 @@ export default function JobApplicationsPage() {
               onChange={e => setSearch(e.target.value)}
               placeholder="Search by name or email..."
               className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-gray-800 px-4 py-2 rounded-lg sm:ml-auto">
+            <Filter className="h-4 w-4 text-gray-400" />
+            <span className="text-xs font-medium text-gray-500 whitespace-nowrap">Min ATS: {minAtsScore}%</span>
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              step="5"
+              value={minAtsScore}
+              onChange={e => setMinAtsScore(parseInt(e.target.value))}
+              className="w-20 sm:w-24 accent-violet-600 cursor-pointer"
             />
           </div>
         </div>
@@ -504,13 +752,31 @@ export default function JobApplicationsPage() {
                                   Applied {new Date(app.applied_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                                 </div>
                               </div>
-                              <StatusBadge status={app.status} />
+                              <div className="flex items-center gap-2 mt-1">
+                                <StatusBadge status={app.status} />
+                                <ATSBadge score={app.ats_score} />
+                              </div>
                             </div>
 
                             {/* Score */}
                             <div className="mt-3 max-w-xs">
                               <ScoreBar score={app.match_score} />
                             </div>
+
+                            {/* Pipeline Progress */}
+                            {selectionProcess && ["SHORTLISTED", "INTERVIEW_SCHEDULED", "ACCEPTED"].includes(app.status) && (
+                              <div className="mt-3 bg-gray-50 dark:bg-zinc-800/50 p-2 rounded-lg border border-gray-100 dark:border-gray-800">
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-gray-500 font-medium">Pipeline Progress</span>
+                                  <span className="text-violet-600 font-bold">Round {app.current_round} / {selectionProcess.rounds.length}</span>
+                                </div>
+                                <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                  {app.current_round > 0 
+                                    ? selectionProcess.rounds[app.current_round - 1]?.title 
+                                    : "Not Started"}
+                                </div>
+                              </div>
+                            )}
 
                             {/* Cover letter preview */}
                             {app.cover_letter && (
@@ -557,10 +823,52 @@ export default function JobApplicationsPage() {
                             </Button>
                           )}
 
+                          {["SHORTLISTED", "INTERVIEW_SCHEDULED"].includes(app.status) && selectionProcess && app.current_round < selectionProcess.rounds.length && (
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleAdvance(app.id)} 
+                              disabled={isUpdating} 
+                              className="text-xs bg-violet-600 hover:bg-violet-700 text-white"
+                            >
+                              {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="h-3.5 w-3.5 mr-1" />}
+                              Advance to Round {app.current_round + 1}
+                            </Button>
+                          )}
+
+                          {/* Accept / Reject at final stage */}
+                          {selectionProcess && app.current_round >= selectionProcess.rounds.length && !["REJECTED", "WITHDRAWN", "ACCEPTED"].includes(app.status) && (
+                            <>
+                              <Button
+                                size="sm"
+                                className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                onClick={() => handleStatusUpdate(app.id, "ACCEPTED")}
+                                disabled={isUpdating}
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                Accept
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleStatusUpdate(app.id, "REJECTED")}
+                                disabled={isUpdating}
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-1" />
+                                Reject
+                              </Button>
+                            </>
+                          )}
+
                           {app.status === "INTERVIEW_SCHEDULED" && (
-                            <Button size="sm" onClick={() => handleStatusUpdate(app.id, "ACCEPTED")} disabled={isUpdating} className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white">
-                              {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-                              Accept Candidate
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleStartInterview(app.id)} 
+                              disabled={startingInterview === app.id} 
+                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              {startingInterview === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5 mr-1" />}
+                              Start Interview
                             </Button>
                           )}
 
@@ -574,20 +882,6 @@ export default function JobApplicationsPage() {
                             >
                               <MessageSquare className="h-3.5 w-3.5 mr-1" />
                               Message
-                            </Button>
-                          )}
-
-                          {/* Reject */}
-                          {!["REJECTED", "WITHDRAWN", "ACCEPTED"].includes(app.status) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => handleStatusUpdate(app.id, "REJECTED")}
-                              disabled={isUpdating}
-                            >
-                              <XCircle className="h-3.5 w-3.5 mr-1" />
-                              Reject
                             </Button>
                           )}
                         </div>
@@ -604,7 +898,7 @@ export default function JobApplicationsPage() {
       {/* Modals */}
       {selectedApplicationId && (
         <ApplicationDetailModal
-          applicationId={selectedApplicationId}
+          applicationId={selectedApplicationId!}
           isOpen={!!selectedApplicationId}
           onClose={() => setSelectedApplicationId(null)}
         />
@@ -614,15 +908,20 @@ export default function JobApplicationsPage() {
         jobId={jobId}
         open={broadcastOpen}
         onClose={() => setBroadcastOpen(false)}
-        notify={notify}
+      />
+
+      <BulkShortlistModal
+        jobId={jobId}
+        open={shortlistOpen}
+        onClose={() => setShortlistOpen(false)}
+        onSuccess={loadApplications}
       />
 
       {interviewTarget && (
         <InterviewModal
-          applicationId={interviewTarget}
+          applicationId={interviewTarget!}
           open={!!interviewTarget}
           onClose={() => setInterviewTarget(null)}
-          notify={notify}
           onSuccess={loadApplications}
         />
       )}

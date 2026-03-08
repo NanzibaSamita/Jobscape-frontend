@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { axiosInstance } from "@/lib/axios/axios";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 export default function VerifyEmailConfirmPage() {
   const params = useSearchParams();
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   const token = params.get("token");
   const emailFromQuery = params.get("email");
@@ -57,7 +59,11 @@ export default function VerifyEmailConfirmPage() {
 
         // ✅ Role-based redirect
         if (role === "EMPLOYER") {
-          toast.success("Email verified! Please complete your profile.");
+          dispatch(showAlert({
+            title: "Email Verified",
+            message: "Please complete your profile.",
+            type: "success"
+          }));
           window.setTimeout(() => {
             router.replace("/employer/register/complete");
           }, 1500);
@@ -65,7 +71,11 @@ export default function VerifyEmailConfirmPage() {
           if (cvUploadToken) {
             localStorage.setItem("cv_upload_token", cvUploadToken);
           }
-          toast.success("Email verified! Please upload your CV.");
+          dispatch(showAlert({
+            title: "Email Verified",
+            message: "Please upload your CV.",
+            type: "success"
+          }));
           window.setTimeout(() => {
             router.replace("/cv-upload");
           }, 1500);
@@ -94,7 +104,11 @@ export default function VerifyEmailConfirmPage() {
 
   const resendVerification = async () => {
     if (!email) {
-      toast.error("Missing email address. Please go back and try again.");
+      dispatch(showAlert({
+        title: "Missing Email",
+        message: "Missing email address. Please go back and try again.",
+        type: "error"
+      }));
       return;
     }
 
@@ -103,13 +117,17 @@ export default function VerifyEmailConfirmPage() {
       const res = await axiosInstance.post("/auth/verify-email/request", { 
         email: email 
       });
-      toast.success(res.data?.message || "Verification email sent again.");
+      dispatch(showAlert({
+        title: "Success",
+        message: res.data?.message || "Verification email sent again.",
+        type: "success"
+      }));
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.detail ||
-          err?.response?.data?.message ||
-          "Failed to resend verification email."
-      );
+      dispatch(showAlert({
+        title: "Error",
+        message: err?.response?.data?.detail || err?.response?.data?.message || "Failed to resend verification email.",
+        type: "error"
+      }));
     } finally {
       setResending(false);
     }

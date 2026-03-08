@@ -3,7 +3,6 @@ import "./globals.css";
 import { StoreProvider } from "@/lib/store/provider";
 import { UIProvider } from "@/contexts/ui-context";
 import { ThemeProvider } from "@/components/theme-provider";
-import ToastProvider from "@/contexts/toast-context";
 import BetaMessage from "@/components/BetaMessage";
 
 export const metadata: Metadata = {
@@ -21,7 +20,6 @@ export default function RootLayout({
   return (
     <html className="h-screen w-screen scrollbar-hide" lang="en" suppressHydrationWarning>
       <body className="antialiased bg-background text-foreground">
-        <ToastProvider>
           <StoreProvider>
             <ThemeProvider
               attribute="class"
@@ -35,7 +33,6 @@ export default function RootLayout({
               </UIProvider>
             </ThemeProvider>
           </StoreProvider>
-        </ToastProvider>
       </body>
     </html>
   );

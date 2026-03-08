@@ -17,6 +17,9 @@ export interface Application {
   status: ApplicationStatus;
   cover_letter: string | null;
   match_score: number;
+  ats_score: number;
+  ats_report?: string;
+  current_round: number;
   applied_at: string;
   updated_at: string;
   // Enriched fields from backend
@@ -79,6 +82,14 @@ export async function getApplicationById(applicationId: string): Promise<Applica
 }
 
 /**
+ * Advance an application to the next round (Employer)
+ */
+export async function advanceApplication(applicationId: string): Promise<Application> {
+  const response = await axiosInstance.post(`/applications/${applicationId}/advance`);
+  return response.data;
+}
+
+/**
  * Withdraw an application (Job Seeker)
  */
 export async function withdrawApplication(applicationId: string): Promise<Application> {
@@ -92,11 +103,13 @@ export async function withdrawApplication(applicationId: string): Promise<Applic
 export async function getJobApplications(
   job_id: string,
   status?: string,
-  minMatchScore?: number
+  minMatchScore?: number,
+  minAtsScore?: number
 ): Promise<Application[]> {
   const params: any = {};
   if (status) params.status = status;
   if (minMatchScore !== undefined && minMatchScore !== null) params.min_match_score = minMatchScore;
+  if (minAtsScore !== undefined && minAtsScore !== null) params.min_ats_score = minAtsScore;
 
   const response = await axiosInstance.get(`/applications/job/${job_id}/applications`, { params });
   return response.data;

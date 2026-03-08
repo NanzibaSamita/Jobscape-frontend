@@ -19,7 +19,8 @@ import {
 import { Eye, EyeOff, Loader, Loader2 } from "lucide-react";
 import { axiosInstance } from "@/lib/axios/axios";
 import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 const REGISTER_JOB_SEEKER_URL = "/auth/register/job-seeker/basic";
 const REGISTER_EMPLOYER_URL = "/employer/register";
@@ -75,6 +76,7 @@ export default function UserInfoForm({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   const form = useForm<UserInfoValues>({
     resolver: zodResolver(userInfoSchema),
@@ -104,7 +106,11 @@ export default function UserInfoForm({
       // ✅ Backend now sends verification email immediately
       const msg =
         res.data?.message || "Account created. Please verify your email to continue.";
-      toast.success(msg);
+      dispatch(showAlert({
+        title: "Success",
+        message: msg,
+        type: "success"
+      }));
 
       // ✅ Send to waiting screen (resend available there)
       router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
@@ -123,7 +129,11 @@ export default function UserInfoForm({
         // If backend returns "already registered but not verified", still route to verify screen
         const maybeMsg = String(detail || "");
         if (maybeMsg.toLowerCase().includes("not verified")) {
-          toast.info(maybeMsg);
+          dispatch(showAlert({
+            title: "Info",
+            message: maybeMsg,
+            type: "info"
+          }));
           router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
         } else {
           form.setError("email", {
@@ -132,7 +142,11 @@ export default function UserInfoForm({
           });
         }
       } else {
-        toast.error(detail);
+        dispatch(showAlert({
+          title: "Registration Error",
+          message: detail,
+          type: "error"
+        }));
       }
     } finally {
       setIsLoading(false);

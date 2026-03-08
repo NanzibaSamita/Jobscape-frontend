@@ -100,3 +100,19 @@ export async function removeProfilePicture(): Promise<{ message: string }> {
   return response.data;
 }
 
+/**
+ * Fetch public job seeker profile (for employers)
+ */
+export async function getPublicJobSeekerProfile(seekerId: string): Promise<JobSeekerProfile> {
+  const response = await axiosInstance.get(`/profile/job-seeker/${seekerId}`);
+  return response.data;
+}
+
+/**
+ * Track that an employer viewed a seeker's profile
+ */
+export async function trackProfileView(seekerId: string): Promise<any> {
+  const response = await axiosInstance.post(`/profile/job-seeker/${seekerId}/view`);
+  return response.data;
+}
+

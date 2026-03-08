@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 import { axiosInstance } from "@/lib/axios/axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,7 @@ import Link from "next/link";
 export default function SubmitDocumentsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const dispatch = useAppDispatch();
   const [formData, setFormData] = useState({
     rjsc_registration_number: "",
     trade_license_number: "",
@@ -29,11 +31,19 @@ export default function SubmitDocumentsPage() {
     const validFiles = files.filter((file) => {
       const validTypes = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
       if (!validTypes.includes(file.type)) {
-        toast.error(`${file.name} is not a valid file type`);
+        dispatch(showAlert({
+          title: "Invalid File",
+          message: `${file.name} is not a valid file type`,
+          type: "error"
+        }));
         return false;
       }
       if (file.size > 5 * 1024 * 1024) {
-        toast.error(`${file.name} is too large (max 5MB)`);
+        dispatch(showAlert({
+          title: "File Too Large",
+          message: `${file.name} is too large (max 5MB)`,
+          type: "error"
+        }));
         return false;
       }
       return true;
@@ -50,7 +60,11 @@ export default function SubmitDocumentsPage() {
     e.preventDefault();
 
     if (documents.length === 0) {
-      toast.error("Please upload at least one document");
+      dispatch(showAlert({
+        title: "Missing Documents",
+        message: "Please upload at least one document",
+        type: "error"
+      }));
       return;
     }
 
@@ -72,11 +86,19 @@ export default function SubmitDocumentsPage() {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      toast.success("Documents submitted successfully! 🎉");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Documents submitted successfully! 🎉",
+        type: "success"
+      }));
       router.push("/employer/profile");
     } catch (error: any) {
       console.error("Submit error:", error);
-      toast.error(error?.response?.data?.detail || "Failed to submit documents");
+      dispatch(showAlert({
+        title: "Submission Error",
+        message: error?.response?.data?.detail || "Failed to submit documents",
+        type: "error"
+      }));
     } finally {
       setLoading(false);
     }

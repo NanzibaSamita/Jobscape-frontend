@@ -3,7 +3,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Send, Loader2, MessageSquare, ChevronLeft, Circle } from "lucide-react";
-import { useNotify } from "@/components/ui/AppNotification";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -52,7 +53,7 @@ function formatTime(iso: string) {
 }
 
 export default function Chat({ applicationId, currentUserRole, currentUserId }: ChatProps) {
-  const notify = useNotify();
+  const dispatch = useAppDispatch();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -118,7 +119,11 @@ export default function Chat({ applicationId, currentUserRole, currentUserId }: 
       const target = allRooms.find(r => r.application_id === appId);
       if (target) openRoom(target);
     } catch (err: any) {
-      notify.error("Chat unavailable", err.message || "Chat is only available after your application is reviewed");
+      dispatch(showAlert({
+        title: "Chat unavailable",
+        message: err.message || "Chat is only available after your application is reviewed",
+        type: "error"
+      }));
     }
   }
 
@@ -174,7 +179,11 @@ export default function Chat({ applicationId, currentUserRole, currentUserId }: 
       setMessages(prev => prev.map(m => m.id === tempMsg.id ? sent : m));
     } catch {
       setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-      notify.error("Failed to send message");
+      dispatch(showAlert({
+        title: "Send Error",
+        message: "Failed to send message",
+        type: "error"
+      }));
       setInput(text);
     } finally {
       setSending(false);

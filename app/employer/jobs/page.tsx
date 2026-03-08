@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { getMyJobs, Job } from "@/lib/api/jobs";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,7 @@ import Link from "next/link";
 export default function EmployerJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
     fetchJobs();
@@ -23,7 +25,11 @@ export default function EmployerJobsPage() {
       const jobs = await getMyJobs();
       setJobs(jobs);
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to load jobs");
+      dispatch(showAlert({
+        title: "Error",
+        message: error?.response?.data?.detail || "Failed to load jobs",
+        type: "error"
+      }));
     } finally {
       setLoading(false);
     }

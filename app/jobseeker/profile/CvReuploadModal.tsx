@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Upload, FileText, Loader2, CheckCircle, AlertCircle } from "lucide-react";
@@ -18,6 +19,7 @@ export default function CvReuploadModal({ isOpen, onClose, onSuccess }: CvReuplo
   const [uploading, setUploading] = useState(false);
   const [parseStatus, setParseStatus] = useState<"idle" | "success" | "failed">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dispatch = useAppDispatch();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -26,13 +28,21 @@ export default function CvReuploadModal({ isOpen, onClose, onSuccess }: CvReuplo
     // Validate file type
     const validTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
     if (!validTypes.includes(file.type)) {
-      toast.error("Please select a PDF or DOCX file");
+      dispatch(showAlert({
+        title: "File Type Error",
+        message: "Please select a PDF or DOCX file",
+        type: "error"
+      }));
       return;
     }
 
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      toast.error("File size must be less than 10MB");
+      dispatch(showAlert({
+        title: "File Size Error",
+        message: "File size must be less than 10MB",
+        type: "error"
+      }));
       return;
     }
 
@@ -42,7 +52,11 @@ export default function CvReuploadModal({ isOpen, onClose, onSuccess }: CvReuplo
 
   const handleUpload = async () => {
     if (!selectedFile) {
-      toast.error("Please select a file first");
+      dispatch(showAlert({
+        title: "Missing File",
+        message: "Please select a file first",
+        type: "error"
+      }));
       return;
     }
 
@@ -51,14 +65,22 @@ export default function CvReuploadModal({ isOpen, onClose, onSuccess }: CvReuplo
       const result = await uploadResume(selectedFile);
       
       setParseStatus(result.parse_status === "SUCCESS" ? "success" : "failed");
-      toast.success(result.message || "CV uploaded successfully!");
+      dispatch(showAlert({
+        title: "Success",
+        message: result.message || "CV uploaded successfully!",
+        type: "success"
+      }));
       
       // Wait a bit to show the status, then call onSuccess
       setTimeout(() => {
         onSuccess();
       }, 1500);
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to upload CV");
+      dispatch(showAlert({
+        title: "Upload Error",
+        message: error?.response?.data?.detail || "Failed to upload CV",
+        type: "error"
+      }));
       setParseStatus("failed");
     } finally {
       setUploading(false);

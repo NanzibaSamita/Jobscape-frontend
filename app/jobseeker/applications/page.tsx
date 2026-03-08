@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 import { getMyApplications, withdrawApplication, Application } from "@/lib/api/applications";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Briefcase, Loader2, XCircle, Building, Calendar } from "lucide-react";
 import Link from "next/link";
+import ApplicationTimeline from "@/components/ApplicationTimeline";
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-800",
@@ -37,7 +39,8 @@ const STATUS_COLORS: Record<string, string> = {
 export default function MyApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("all"); // ✅ Changed default to "all"
+  const [statusFilter, setStatusFilter] = useState("all");
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
     fetchApplications();
@@ -50,7 +53,11 @@ export default function MyApplicationsPage() {
       const data = await getMyApplications(statusFilter === "all" ? undefined : statusFilter);
       setApplications(data);
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to load applications");
+      dispatch(showAlert({
+        title: "Load Error",
+        message: error?.response?.data?.detail || "Failed to load applications",
+        type: "error"
+      }));
     } finally {
       setLoading(false);
     }
@@ -61,10 +68,18 @@ export default function MyApplicationsPage() {
 
     try {
       await withdrawApplication(applicationId);
-      toast.success("Application withdrawn successfully");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Application withdrawn successfully",
+        type: "success"
+      }));
       fetchApplications();
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to withdraw application");
+      dispatch(showAlert({
+        title: "Withdraw Error",
+        message: error?.response?.data?.detail || "Failed to withdraw application",
+        type: "error"
+      }));
     }
   }
 
@@ -154,6 +169,9 @@ export default function MyApplicationsPage() {
                           <Badge className={STATUS_COLORS[app.status] || ""}>
                             {app.status.replace(/_/g, " ")}
                           </Badge>
+                          <div className="mt-2 max-w-[320px]">
+                            <ApplicationTimeline status={app.status} />
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -212,9 +230,12 @@ export default function MyApplicationsPage() {
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <Badge className={STATUS_COLORS[app.status] || ""}>
-                        {app.status.replace(/_/g, " ")}
-                      </Badge>
+                      <div className="space-y-2">
+                        <Badge className={STATUS_COLORS[app.status] || ""}>
+                          {app.status.replace(/_/g, " ")}
+                        </Badge>
+                        <ApplicationTimeline status={app.status} />
+                      </div>
                       <div className="flex items-center gap-2">
                         <div className="w-20 bg-gray-200 rounded-full h-2">
                           <div

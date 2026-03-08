@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 import {
   getUserProfile,
   updateJobSeekerProfile,
@@ -29,6 +30,7 @@ export default function ProfileEditPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const dispatch = useAppDispatch();
 
   const [formData, setFormData] = useState({
     full_name: "",
@@ -73,7 +75,11 @@ export default function ProfileEditPage() {
       });
       setSkills(prof.skills || []);
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to load profile");
+      dispatch(showAlert({
+        title: "Load Error",
+        message: error?.response?.data?.detail || "Failed to load profile",
+        type: "error"
+      }));
       router.push("/login");
     } finally {
       setLoading(false);
@@ -85,19 +91,31 @@ export default function ProfileEditPage() {
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image size must be less than 5MB");
+      dispatch(showAlert({
+        title: "File Size Error",
+        message: "Image size must be less than 5MB",
+        type: "error"
+      }));
       return;
     }
 
     try {
       setUploadingImage(true);
       const result = await uploadProfilePicture(file);
-      toast.success("Profile picture uploaded successfully");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Profile picture uploaded successfully",
+        type: "success"
+      }));
       if (profile) {
         setProfile({ ...profile, profile_picture_url: result.url });
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to upload image");
+      dispatch(showAlert({
+        title: "Upload Error",
+        message: error?.response?.data?.detail || "Failed to upload image",
+        type: "error"
+      }));
     } finally {
       setUploadingImage(false);
     }
@@ -108,12 +126,20 @@ export default function ProfileEditPage() {
 
     try {
       await removeProfilePicture();
-      toast.success("Profile picture removed");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Profile picture removed",
+        type: "success"
+      }));
       if (profile) {
         setProfile({ ...profile, profile_picture_url: null });
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to remove image");
+      dispatch(showAlert({
+        title: "Remove Error",
+        message: error?.response?.data?.detail || "Failed to remove image",
+        type: "error"
+      }));
     }
   }
 
@@ -121,7 +147,11 @@ export default function ProfileEditPage() {
     const trimmed = newSkill.trim();
     if (!trimmed) return;
     if (skills.includes(trimmed)) {
-      toast.error("Skill already added");
+      dispatch(showAlert({
+        title: "Duplicate Skill",
+        message: "Skill already added",
+        type: "error"
+      }));
       return;
     }
     setSkills([...skills, trimmed]);
@@ -139,10 +169,18 @@ export default function ProfileEditPage() {
         ...formData,
         skills,
       });
-      toast.success("Profile updated successfully!");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Profile updated successfully!",
+        type: "success"
+      }));
       router.push("/jobseeker/profile");
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to update profile");
+      dispatch(showAlert({
+        title: "Save Error",
+        message: error?.response?.data?.detail || "Failed to update profile",
+        type: "error"
+      }));
     } finally {
       setSaving(false);
     }

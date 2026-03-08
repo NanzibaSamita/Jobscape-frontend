@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Briefcase, FileText, MessageSquare, Bell } from "lucide-react";
+import { Bell, Briefcase, InboxIcon, LogOut, User } from "lucide-react";
 import { useAppDispatch } from "@/lib/store";
 import { showAlert } from "@/lib/store/slices/notificationSlice";
+import { useState } from "react";
 import { NotificationTray } from "@/components/notifications/NotificationTray";
 
-export default function JobSeekerLayout({ children }: { children: React.ReactNode }) {
+export default function EmployerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const dispatch = useAppDispatch();
@@ -17,33 +17,26 @@ export default function JobSeekerLayout({ children }: { children: React.ReactNod
   const [unreadCount, setUnreadCount] = useState(0);
 
   const handleLogout = async () => {
-    // ✅ Clear all storage
     localStorage.clear();
     sessionStorage.clear();
-
-    // ✅ Clear server-side cookies
     try {
       await fetch("/api/logout", { method: "POST" });
-    } catch (error) {
+    } catch {
       // Ignore errors
     }
-
-    // ✅ Show success message
     dispatch(showAlert({
       title: "Success",
       message: "Logged out successfully",
       type: "success"
     }));
-
-    // ✅ Hard redirect to login (bypasses cache)
     window.location.href = "/login";
   };
 
   const navItems = [
-    { href: "/jobseeker/profile", label: "Profile", icon: User },
+    { href: "/employer/profile", label: "Profile", icon: User },
+    { href: "/employer/jobs", label: "My Jobs", icon: Briefcase },
+    { href: "/employer/inbox", label: "Inbox", icon: InboxIcon },
     { href: "/jobs", label: "Browse Jobs", icon: Briefcase },
-    { href: "/jobseeker/applications", label: "My Applications", icon: FileText },
-    { href: "/jobseeker/messages", label: "Messages", icon: MessageSquare },
   ];
 
   return (
@@ -54,7 +47,7 @@ export default function JobSeekerLayout({ children }: { children: React.ReactNod
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <div className="flex items-center">
-              <Link href="/jobs" className="text-xl font-bold text-purple-600">
+              <Link href="/employer/jobs" className="text-xl font-bold text-purple-600">
                 Jobscape
               </Link>
             </div>
@@ -63,7 +56,7 @@ export default function JobSeekerLayout({ children }: { children: React.ReactNod
             <div className="hidden md:flex items-center space-x-4">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                 return (
                   <Link
                     key={item.href}
@@ -122,4 +115,3 @@ export default function JobSeekerLayout({ children }: { children: React.ReactNod
     </div>
   );
 }
-

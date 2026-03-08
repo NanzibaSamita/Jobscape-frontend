@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { toast } from "react-toastify";
-import { getJobById, Job } from "@/lib/api/jobs";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
+import { getJobById, Job, SelectionProcess, searchJobs } from "@/lib/api/jobs";
 import { applyToJob } from "@/lib/api/applications";
 import { getCoverLetters, CoverLetter, createCoverLetter } from "@/lib/api/coverletters";
 import { getMyResumes, Resume } from "@/lib/api/resume";
@@ -39,6 +40,8 @@ import {
   Sparkles,
   Save,
   MapPin,
+  ChevronRight,
+  ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
 import UploadFile from "@/app/signup/comps/UploadFile";
@@ -48,17 +51,21 @@ import { reUploadResume } from "@/lib/api/resume";
 import CommuteScore from "@/components/CommuteScore";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const token = localStorage.getItem("access_token");
 
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const jobId = params.id as string;
+  const dispatch = useAppDispatch();
 
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [applying, setApplying] = useState(false);
+
+  // Selection process & similar jobs
+  const [selectionProcess, setSelectionProcess] = useState<SelectionProcess | null>(null);
+  const [similarJobs, setSimilarJobs] = useState<Job[]>([]);
 
   // ✅ NEW: State for user's location
   const [userLocation, setUserLocation] = useState<string | undefined>(undefined);
@@ -82,7 +89,7 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     fetchJobDetails();
-    fetchUserLocation(); // ✅ NEW
+    fetchUserLocation();
   }, [jobId]);
 
   async function fetchJobDetails() {
@@ -90,8 +97,30 @@ export default function JobDetailPage() {
       setLoading(true);
       const data = await getJobById(jobId);
       setJob(data);
+
+      // Fetch selection process (silent fail)
+      try {
+        const token = localStorage.getItem("access_token");
+        const selRes = await fetch(`${API_BASE}/selection/job/${jobId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (selRes.ok) setSelectionProcess(await selRes.json());
+      } catch { /* silent */ }
+
+      // Fetch similar jobs by first 3 skills
+      try {
+        if (data.required_skills?.length) {
+          const skills = data.required_skills.slice(0, 3).join(",");
+          const sim = await searchJobs({ skills, limit: 4 });
+          setSimilarJobs(sim.items.filter((j) => j.id !== jobId));
+        }
+      } catch { /* silent */ }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to load job details");
+      dispatch(showAlert({
+        title: "Load Error",
+        message: error?.response?.data?.detail || "Failed to load job details",
+        type: "error"
+      }));
       router.push("/jobs");
     } finally {
       setLoading(false);
@@ -136,7 +165,11 @@ export default function JobDetailPage() {
 
       setIsApplyModalOpen(true);
     } catch (error: any) {
-      toast.error("Failed to load application data");
+      dispatch(showAlert({
+        title: "Data Error",
+        message: "Failed to load application data",
+        type: "error"
+      }));
       setIsApplyModalOpen(true);
     }
   }
@@ -147,7 +180,11 @@ export default function JobDetailPage() {
     try {
       setUploadingResume(true);
       const result = await reUploadResume(file);
-      toast.success(result.message || "Resume uploaded successfully!");
+      dispatch(showAlert({
+        title: "Success",
+        message: result.message || "Resume uploaded successfully!",
+        type: "success"
+      }));
 
       const resumesData = await getMyResumes();
       setResumes(resumesData.resumes);
@@ -158,7 +195,11 @@ export default function JobDetailPage() {
         setNewResumeFile(null);
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to upload resume");
+      dispatch(showAlert({
+        title: "Upload Error",
+        message: error?.response?.data?.detail || "Failed to upload resume",
+        type: "error"
+      }));
     } finally {
       setUploadingResume(false);
     }
@@ -182,9 +223,17 @@ export default function JobDetailPage() {
       const result = await generateCoverLetter(jobId);
       setCoverLetterText(result.cover_letter);
       setSelectedCoverLetterId("");
-      toast.success("AI cover letter generated!");
+      dispatch(showAlert({
+        title: "AI Generated",
+        message: "AI cover letter generated!",
+        type: "success"
+      }));
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to generate cover letter");
+      dispatch(showAlert({
+        title: "Generation Error",
+        message: error?.response?.data?.detail || "Failed to generate cover letter",
+        type: "error"
+      }));
     } finally {
       setGeneratingAI(false);
     }
@@ -192,7 +241,11 @@ export default function JobDetailPage() {
 
   async function handleSaveCoverLetter() {
     if (!coverLetterTitle.trim()) {
-      toast.error("Please enter a title for the cover letter");
+      dispatch(showAlert({
+        title: "Missing Title",
+        message: "Please enter a title for the cover letter",
+        type: "error"
+      }));
       return;
     }
 
@@ -202,14 +255,22 @@ export default function JobDetailPage() {
         title: coverLetterTitle,
         content: coverLetterText,
       });
-      toast.success("Cover letter saved!");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Cover letter saved!",
+        type: "success"
+      }));
       setShowSaveDialog(false);
       setCoverLetterTitle("");
 
       const letters = await getCoverLetters();
       setCoverLetters(letters);
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to save cover letter");
+      dispatch(showAlert({
+        title: "Save Error",
+        message: error?.response?.data?.detail || "Failed to save cover letter",
+        type: "error"
+      }));
     } finally {
       setSavingCoverLetter(false);
     }
@@ -217,7 +278,11 @@ export default function JobDetailPage() {
 
   async function handleApply() {
     if (!selectedResumeId) {
-      toast.error("Please select a resume");
+      dispatch(showAlert({
+        title: "Missing Resume",
+        message: "Please select a resume",
+        type: "error"
+      }));
       return;
     }
 
@@ -228,11 +293,19 @@ export default function JobDetailPage() {
         resume_id: selectedResumeId,
         cover_letter: coverLetterText || undefined,
       });
-      toast.success("Application submitted successfully!");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Application submitted successfully!",
+        type: "success"
+      }));
       setIsApplyModalOpen(false);
       router.push("/jobseeker/applications");
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to submit application");
+      dispatch(showAlert({
+        title: "Apply Error",
+        message: error?.response?.data?.detail || "Failed to submit application",
+        type: "error"
+      }));
     } finally {
       setApplying(false);
     }
@@ -264,7 +337,20 @@ export default function JobDetailPage() {
           <CardHeader>
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <CardTitle className="text-3xl mb-2">{job.title}</CardTitle>
+                <div className="flex items-center gap-3 flex-wrap mb-2">
+                  <CardTitle className="text-3xl">{job.title}</CardTitle>
+                  {/* Closing Soon badge */}
+                  {(() => {
+                    const daysLeft = Math.ceil(
+                      (new Date(job.application_deadline).getTime() - Date.now()) / 86400000
+                    );
+                    return daysLeft > 0 && daysLeft <= 3 ? (
+                      <Badge className="bg-red-100 text-red-700 border-0 animate-pulse">
+                        Closing in {daysLeft} day{daysLeft === 1 ? "" : "s"}
+                      </Badge>
+                    ) : null;
+                  })()}
+                </div>
                 <div className="flex items-center gap-2 text-lg text-gray-600">
                   <Building className="h-5 w-5" />
                   {job.company_name || "Company Name"}
@@ -348,6 +434,41 @@ export default function JobDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Posted By Card */}
+        {job.posted_by && (
+          <Card
+            className="mb-6 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => router.push(`/employer/public/${job.posted_by!.id}`)}
+          >
+            <CardContent className="pt-4">
+              <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">
+                Posted By
+              </p>
+              <div className="flex items-center gap-3">
+                {job.posted_by.logo_url ? (
+                  <img
+                    src={job.posted_by.logo_url}
+                    alt="logo"
+                    className="w-12 h-12 rounded-full object-cover border"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+                    <Building className="h-6 w-6 text-purple-600" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900">{job.posted_by.full_name}</p>
+                  {job.posted_by.job_title && (
+                    <p className="text-sm text-gray-500">{job.posted_by.job_title}</p>
+                  )}
+                  <p className="text-sm text-purple-600">{job.posted_by.company_name}</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-gray-400" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Job Description */}
         <Card className="mb-6">
           <CardHeader>
@@ -399,7 +520,55 @@ export default function JobDetailPage() {
           </Card>
         )}
 
-        {/* ✅ NEW: Commute Score — placed after skills, before the end */}
+        {/* Selection Process */}
+        {selectionProcess && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-purple-600" />
+                Selection Process
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {selectionProcess.rounds.map((round) => (
+                  <div
+                    key={round.number}
+                    className="flex gap-3 p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      {round.number}
+                    </div>
+                    <div>
+                      <p className="font-medium">{round.title}</p>
+                      <p className="text-sm text-purple-600 capitalize">{round.type}</p>
+                      {round.description && (
+                        <p className="text-sm text-gray-600 mt-1">{round.description}</p>
+                      )}
+                      <div className="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
+                        {round.duration_minutes && (
+                          <span>{round.duration_minutes} min</span>
+                        )}
+                        <span>{round.is_online ? "Online" : "In-Person"}</span>
+                        {round.location_or_link && (
+                          <span>{round.location_or_link}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {selectionProcess.instructions && (
+                <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <p className="text-sm font-medium text-amber-800">Additional Instructions</p>
+                  <p className="text-sm text-amber-700 mt-1">{selectionProcess.instructions}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Commute Estimate */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Commute Estimate</CardTitle>
@@ -413,6 +582,30 @@ export default function JobDetailPage() {
             />
           </CardContent>
         </Card>
+
+        {/* Similar Jobs */}
+        {similarJobs.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Similar Jobs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {similarJobs.map((sj) => (
+                <Link key={sj.id} href={`/jobs/${sj.id}`}>
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-purple-200 hover:bg-purple-50/30 transition-colors cursor-pointer">
+                    <div>
+                      <p className="font-medium text-gray-900 text-sm">{sj.title}</p>
+                      <p className="text-xs text-gray-500">
+                        {sj.company_name} • {sj.location}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
       </div>
 
@@ -435,8 +628,7 @@ export default function JobDetailPage() {
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 transition-colors">
                 <UploadFile
                   loading={uploadingResume}
-                  onFileUploaded={handleResumeUpload}
-                  className="max-w-md mx-auto"
+                  onFileUploaded={(file) => file && handleResumeUpload(file)}
                 />
               </div>
 

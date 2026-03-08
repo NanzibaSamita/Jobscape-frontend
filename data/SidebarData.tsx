@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { BriefcaseBusiness, Building2, FileStack, LayoutDashboard, Sparkles } from 'lucide-react';
+import { BriefcaseBusiness, Building2, FileStack, LayoutDashboard, MessageSquare, Sparkles } from 'lucide-react';
 
 const SidebarData: {
   id: number;
@@ -102,6 +102,18 @@ const SidebarData: {
       icon: <FileStack size={20} />,
       for: ["90"],
       route: "/applied-jobs",
+      subItemList: [
+
+      ],
+    },
+    {
+      id: 7,
+      name: "Messages",
+      hasSubmenu: false,
+      expanded: false,
+      icon: <MessageSquare size={20} />,
+      for: ["90", "95"],
+      route: "/jobseeker/messages",
       subItemList: [
 
       ],

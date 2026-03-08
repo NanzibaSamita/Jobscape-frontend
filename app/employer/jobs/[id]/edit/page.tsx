@@ -1,8 +1,8 @@
-// app/employer/jobs/create/page.tsx
+// app/employer/jobs/[id]/edit/page.tsx
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -29,45 +29,39 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Briefcase, ArrowLeft, Trash2, PlusCircle, Info } from "lucide-react";
+import { Loader2, Briefcase, ArrowLeft, Trash2, PlusCircle, Info, Save } from "lucide-react";
 import Link from "next/link";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { SelectionRound } from "@/lib/api/jobs";
 
 // ✅ Validation Schema
 const roundSchema = z.object({
+  id: z.string().optional(),
   number: z.number(),
   type: z.enum(["INITIAL_SCREENING", "TECHNICAL_INTERVIEW", "HR_INTERVIEW", "CODING_ROUND", "QUIZ_TASK", "FINAL_CONVERSATION"]),
   title: z.string().min(2, "Title is required"),
-  description: z.string(),
+  description: z.string().default(""),
   duration_minutes: z.number().nullable(),
   is_online: z.boolean(),
-  location_or_link: z.string(),
+  location_or_link: z.string().default(""),
   time_limit_minutes: z.number().nullable(),
-  instructions: z.string(),
+  instructions: z.string().default(""),
 });
 
-const jobCreateSchema = z.object({
+const jobEditSchema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
   description: z.string().min(50, "Description must be at least 50 characters"),
   salary_min: z.number().min(0, "Minimum salary must be positive").nullable(),
   salary_max: z.number().min(0, "Maximum salary must be positive").nullable(),
   location: z.string().min(2, "Location is required"),
-  work_mode: z.enum(["ONSITE", "REMOTE", "HYBRID"], {
-    required_error: "Work mode is required",
-  }),
-  job_type: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP"], {
-    required_error: "Job type is required",
-  }),
-  experience_level: z.enum(["ENTRY", "MID", "SENIOR", "LEAD"], {
-    required_error: "Experience level is required",
-  }),
+  work_mode: z.enum(["ONSITE", "REMOTE", "HYBRID"]),
+  job_type: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP"]),
+  experience_level: z.enum(["ENTRY", "MID", "SENIOR", "LEAD"]),
   required_skills: z.array(z.string()).min(1, "Add at least one required skill"),
   preferred_skills: z.array(z.string()),
   is_fresh_graduate_friendly: z.boolean(),
   application_deadline: z.string().min(1, "Application deadline is required"),
-  hiring_policy: z.string(),
+  hiring_policy: z.string().default(""),
   ats_threshold: z.number().min(0).max(100),
   selection_rounds: z.array(roundSchema).min(1, "At least one selection round is required").max(5, "Maximum 5 rounds allowed"),
 }).refine(
@@ -83,17 +77,21 @@ const jobCreateSchema = z.object({
   }
 );
 
-type JobCreateValues = z.infer<typeof jobCreateSchema>;
+type JobEditValues = z.infer<typeof jobEditSchema>;
 
-export default function CreateJobPage() {
+export default function EditJobPage() {
   const router = useRouter();
+  const params = useParams();
   const dispatch = useAppDispatch();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const jobId = params.id as string;
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [requiredSkillInput, setRequiredSkillInput] = useState("");
-  const [preferredSkillInput, setPreferredSkillInput] = useState("");
+  const [selectionProcessId, setSelectionProcessId] = useState<string | null>(null);
 
-  const form = useForm<JobCreateValues>({
-    resolver: zodResolver(jobCreateSchema),
+  const form = useForm<JobEditValues>({
+    resolver: zodResolver(jobEditSchema) as any,
     defaultValues: {
       title: "",
       description: "",
@@ -109,19 +107,7 @@ export default function CreateJobPage() {
       application_deadline: "",
       hiring_policy: "",
       ats_threshold: 60,
-      selection_rounds: [
-        {
-          number: 1,
-          type: "INITIAL_SCREENING",
-          title: "Initial Screening",
-          description: "",
-          is_online: true,
-          duration_minutes: 30,
-          location_or_link: "",
-          time_limit_minutes: null,
-          instructions: "",
-        }
-      ],
+      selection_rounds: [],
     },
   });
 
@@ -130,7 +116,65 @@ export default function CreateJobPage() {
     name: "selection_rounds",
   });
 
-  // Skills management
+  const fetchJobData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [jobRes, selectionRes] = await Promise.all([
+        axiosInstance.get(`/jobs/${jobId}`),
+        axiosInstance.get(`/selection/job/${jobId}`).catch(() => ({ data: null }))
+      ]);
+
+      const job = jobRes.data;
+      const selection = selectionRes.data;
+
+      if (selection) {
+        setSelectionProcessId(selection.id);
+      }
+
+      form.reset({
+        title: job.title,
+        description: job.description,
+        salary_min: job.salary_min,
+        salary_max: job.salary_max,
+        location: job.location,
+        work_mode: job.work_mode,
+        job_type: job.job_type,
+        experience_level: job.experience_level,
+        required_skills: job.required_skills,
+        preferred_skills: job.preferred_skills,
+        is_fresh_graduate_friendly: job.is_fresh_graduate_friendly,
+        application_deadline: new Date(job.application_deadline).toISOString().split("T")[0],
+        hiring_policy: selection?.instructions || job.hiring_policy || "",
+        ats_threshold: selection?.ats_threshold ?? 60,
+        selection_rounds: selection?.rounds?.map((r: any) => ({
+          id: r.id,
+          number: r.number,
+          type: r.type,
+          title: r.title,
+          description: r.description || "",
+          duration_minutes: r.duration_minutes,
+          is_online: r.is_online,
+          location_or_link: r.location_or_link || "",
+          time_limit_minutes: r.time_limit_minutes,
+          instructions: r.instructions || "",
+        })) || [],
+      });
+    } catch (err: any) {
+      dispatch(showAlert({
+        title: "Error",
+        message: "Failed to load job details",
+        type: "error"
+      }));
+      router.push("/employer/jobs");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [jobId, form, router, dispatch]);
+
+  useEffect(() => {
+    fetchJobData();
+  }, [fetchJobData]);
+
   const addRequiredSkill = () => {
     if (requiredSkillInput.trim()) {
       const currentSkills = form.getValues("required_skills");
@@ -143,35 +187,12 @@ export default function CreateJobPage() {
 
   const removeRequiredSkill = (skill: string) => {
     const currentSkills = form.getValues("required_skills");
-    form.setValue(
-      "required_skills",
-      currentSkills.filter((s) => s !== skill)
-    );
+    form.setValue("required_skills", currentSkills.filter((s) => s !== skill));
   };
 
-  const addPreferredSkill = () => {
-    if (preferredSkillInput.trim()) {
-      const currentSkills = form.getValues("preferred_skills") || [];
-      if (!currentSkills.includes(preferredSkillInput.trim())) {
-        form.setValue("preferred_skills", [...currentSkills, preferredSkillInput.trim()]);
-        setPreferredSkillInput("");
-      }
-    }
-  };
-
-  const removePreferredSkill = (skill: string) => {
-    const currentSkills = form.getValues("preferred_skills") || [];
-    form.setValue(
-      "preferred_skills",
-      currentSkills.filter((s) => s !== skill)
-    );
-  };
-
-  const onSubmit = async (data: JobCreateValues) => {
-    setIsSubmitting(true);
-
+  const onSubmit = async (data: JobEditValues) => {
+    setIsSaving(true);
     try {
-      // 1. Create Job
       const deadline = new Date(data.application_deadline).toISOString();
       const jobPayload = {
         title: data.title,
@@ -190,15 +211,13 @@ export default function CreateJobPage() {
         ats_threshold: data.ats_threshold,
       };
 
-      const jobResponse = await axiosInstance.post("/employer/jobs", jobPayload);
-      const jobId = jobResponse.data.id;
+      await axiosInstance.patch(`/jobs/${jobId}`, jobPayload);
 
-      // 2. Create Selection Process
       const selectionPayload = {
         job_id: jobId,
         rounds: data.selection_rounds.map((r, index) => ({
           ...r,
-          number: index + 1, // Ensure sequential
+          number: index + 1,
           duration_minutes: r.duration_minutes || undefined,
           time_limit_minutes: ["CODING_ROUND", "QUIZ_TASK"].includes(r.type) ? r.time_limit_minutes : undefined,
           instructions: ["CODING_ROUND", "QUIZ_TASK"].includes(r.type) ? r.instructions : undefined,
@@ -206,42 +225,36 @@ export default function CreateJobPage() {
         instructions: data.hiring_policy,
       };
 
-      await axiosInstance.post("/selection/", selectionPayload);
+      if (selectionProcessId) {
+        await axiosInstance.put(`/selection/${selectionProcessId}`, selectionPayload);
+      } else {
+        await axiosInstance.post("/selection/", selectionPayload);
+      }
 
       dispatch(showAlert({
         title: "Success",
-        message: "Job and Selection Process created successfully!",
+        message: "Job and selection process updated successfully! 🎉",
         type: "success"
       }));
-      router.push("/employer/profile");
-    } catch (error: any) {
-      console.error("Creation error:", error);
-      const detail = error?.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        detail.forEach((err: any) => {
-          dispatch(showAlert({
-            title: "Validation Error",
-            message: `${err.loc?.join(" > ") || "Error"}: ${err.msg}`,
-            type: "error"
-          }));
-        });
-      } else if (typeof detail === "string") {
-        dispatch(showAlert({
-          title: "Error",
-          message: detail,
-          type: "error"
-        }));
-      } else {
-        dispatch(showAlert({
-          title: "Error",
-          message: "An error occurred during creation",
-          type: "error"
-        }));
-      }
+      router.push(`/employer/jobs/${jobId}/applications`);
+    } catch (err: any) {
+      dispatch(showAlert({
+        title: "Update Error",
+        message: err?.response?.data?.detail || "Failed to update job",
+        type: "error"
+      }));
     } finally {
-      setIsSubmitting(false);
+      setIsSaving(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -258,19 +271,16 @@ export default function CreateJobPage() {
             </Link>
             <Briefcase className="h-8 w-8 text-purple-600" />
             <div>
-              <h1 className="text-3xl font-bold">Post a New Job</h1>
-              <p className="text-gray-600">Define the role and your hiring pipeline</p>
+              <h1 className="text-3xl font-bold">Edit Job Post</h1>
+              <p className="text-gray-600">Update the job details and hiring pipeline</p>
             </div>
           </div>
         </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            {/* Step 1: Job Basics */}
             <Card className="border-2">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold">1. Job Details</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-xl font-bold">1. Job Details</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <FormField
                   control={form.control}
@@ -278,9 +288,7 @@ export default function CreateJobPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Job Title *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. Senior Backend Engineer" {...field} />
-                      </FormControl>
+                      <FormControl><Input {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -292,13 +300,7 @@ export default function CreateJobPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Job Description *</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="What is this role about?" 
-                          rows={6} 
-                          {...field} 
-                        />
-                      </FormControl>
+                      <FormControl><Textarea rows={6} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -311,9 +313,7 @@ export default function CreateJobPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Location *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="City, Country" {...field} />
-                        </FormControl>
+                        <FormControl><Input {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -324,9 +324,7 @@ export default function CreateJobPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Application Deadline *</FormLabel>
-                        <FormControl>
-                          <Input type="date" min={today} {...field} />
-                        </FormControl>
+                        <FormControl><Input type="date" min={today} {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -340,7 +338,7 @@ export default function CreateJobPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Work Mode</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value="REMOTE">Remote</SelectItem>
@@ -357,7 +355,7 @@ export default function CreateJobPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Job Type</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value="FULL_TIME">Full-time</SelectItem>
@@ -375,7 +373,7 @@ export default function CreateJobPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Experience</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value="ENTRY">Entry Level</SelectItem>
@@ -391,11 +389,8 @@ export default function CreateJobPage() {
               </CardContent>
             </Card>
 
-            {/* Step 2: Settings & ATS */}
             <Card className="border-2">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold">2. ATS & Selection Settings</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-xl font-bold">2. ATS & Selection Settings</CardTitle></CardHeader>
               <CardContent className="space-y-6">
                 <FormField
                   control={form.control}
@@ -404,42 +399,28 @@ export default function CreateJobPage() {
                     <FormItem>
                       <div className="flex items-center justify-between">
                         <FormLabel>ATS Pass Threshold (%)</FormLabel>
-                        <Badge variant="outline" className="text-purple-600 bg-purple-50">
-                          {field.value}%
-                        </Badge>
+                        <Badge variant="outline" className="text-purple-600 bg-purple-50">{field.value}%</Badge>
                       </div>
                       <FormControl>
                         <Input 
-                          type="range" 
-                          min="0" 
-                          max="100" 
-                          step="5" 
+                          type="range" min="0" max="100" step="5" 
                           {...field} 
                           onChange={(e) => field.onChange(parseInt(e.target.value))}
                           className="h-2 bg-purple-100 rounded-lg appearance-none cursor-pointer accent-purple-600"
                         />
                       </FormControl>
-                      <FormDescription>
-                        Candidates with matching scores below this will be automatically filtered.
-                      </FormDescription>
+                      <FormDescription>Scores below this will be automatically filtered.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="hiring_policy"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>General Hiring Policy / Instructions</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="e.g. We value problem-solving skills and cultural fit. Final selection depends on technical performance." 
-                          rows={3} 
-                          {...field} 
-                        />
-                      </FormControl>
+                      <FormControl><Textarea rows={3} {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -447,18 +428,12 @@ export default function CreateJobPage() {
               </CardContent>
             </Card>
 
-            {/* Step 3: Selection Rounds Builder */}
             <Card className="border-2 border-purple-100">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl font-bold flex items-center gap-2">
-                    3. Hiring Pipeline (Rounds)
-                  </CardTitle>
+                  <CardTitle className="text-xl font-bold">3. Hiring Pipeline (Rounds)</CardTitle>
                   <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    disabled={fields.length >= 5}
+                    type="button" variant="outline" size="sm" disabled={fields.length >= 5}
                     onClick={() => append({
                       number: fields.length + 1,
                       type: "TECHNICAL_INTERVIEW",
@@ -471,34 +446,21 @@ export default function CreateJobPage() {
                       instructions: "",
                     })}
                   >
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Add Round
+                    <PlusCircle className="h-4 w-4 mr-2" /> Add Round
                   </Button>
                 </div>
-                <FormDescription>
-                  Define up to 5 rounds. Candidates will progress sequentially.
-                </FormDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 {fields.map((field, index) => (
-                  <div key={field.id} className="p-4 rounded-xl border-2 border-gray-100 bg-white space-y-4 relative">
+                  <div key={field.id} className="p-4 rounded-xl border-2 border-gray-100 bg-white space-y-4">
                     <div className="flex items-center justify-between">
-                      <Badge variant="secondary" className="bg-purple-600 text-white hover:bg-purple-700">
-                        Round {index + 1}
-                      </Badge>
+                      <Badge className="bg-purple-600 text-white">Round {index + 1}</Badge>
                       {fields.length > 1 && (
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
-                          onClick={() => remove(index)}
-                        >
+                        <Button type="button" variant="ghost" size="sm" className="text-red-500" onClick={() => remove(index)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       )}
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
@@ -506,7 +468,7 @@ export default function CreateJobPage() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Round Type</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                               <SelectContent>
                                 <SelectItem value="INITIAL_SCREENING">Initial Screening</SelectItem>
@@ -524,32 +486,19 @@ export default function CreateJobPage() {
                         control={form.control}
                         name={`selection_rounds.${index}.title`}
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Title</FormLabel>
-                            <FormControl><Input {...field} /></FormControl>
-                          </FormItem>
+                          <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
                         )}
                       />
                     </div>
-
-                    {/* Conditional Fields for Coding Round or Quiz */}
                     {["CODING_ROUND", "QUIZ_TASK"].includes(form.watch(`selection_rounds.${index}.type`)) && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-purple-50 rounded-lg border border-purple-100 animate-in fade-in slide-in-from-top-1">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-purple-50 rounded-lg">
                         <FormField
                           control={form.control}
                           name={`selection_rounds.${index}.time_limit_minutes`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-purple-700">Time Limit (mins)</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="number" 
-                                  placeholder="e.g. 60" 
-                                  onChange={e => field.onChange(parseInt(e.target.value))}
-                                  value={field.value || ""}
-                                />
-                              </FormControl>
-                              <FormMessage />
+                              <FormLabel>Time Limit (mins)</FormLabel>
+                              <FormControl><Input type="number" onChange={e => field.onChange(parseInt(e.target.value))} value={field.value || ""} /></FormControl>
                             </FormItem>
                           )}
                         />
@@ -557,27 +506,18 @@ export default function CreateJobPage() {
                           control={form.control}
                           name={`selection_rounds.${index}.instructions`}
                           render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-purple-700">Coding Instructions</FormLabel>
-                              <FormControl>
-                                <Input placeholder="e.g. Solve 3 easy LeetCode problems" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
+                            <FormItem><FormLabel>Instructions</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
                           )}
                         />
                       </div>
                     )}
-
                     <div className="flex items-center gap-6">
-                       <FormField
+                      <FormField
                         control={form.control}
                         name={`selection_rounds.${index}.is_online`}
                         render={({ field }) => (
-                          <FormItem className="flex items-center justify-center space-x-2 space-y-0">
-                            <FormControl>
-                              <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                            </FormControl>
+                          <FormItem className="flex items-center space-x-2 space-y-0">
+                            <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                             <FormLabel>Online / Virtual</FormLabel>
                           </FormItem>
                         )}
@@ -589,14 +529,8 @@ export default function CreateJobPage() {
                           <FormItem className="flex-1">
                             <FormControl>
                               <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-500 whitespace-nowrap">Duration:</span>
-                                <Input 
-                                  type="number" 
-                                  className="h-8" 
-                                  placeholder="mins"
-                                  onChange={e => field.onChange(parseInt(e.target.value))}
-                                  value={field.value || ""}
-                                />
+                                <span className="text-sm text-gray-500">Duration:</span>
+                                <Input type="number" className="h-8" onChange={e => field.onChange(parseInt(e.target.value))} value={field.value || ""} />
                               </div>
                             </FormControl>
                           </FormItem>
@@ -608,39 +542,26 @@ export default function CreateJobPage() {
               </CardContent>
             </Card>
 
-            {/* Skills Card */}
             <Card className="border-2">
               <CardHeader><CardTitle className="text-xl font-bold">4. Skills & Requirements</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <FormLabel>Required Skills *</FormLabel>
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="e.g. React, Node.js"
-                    value={requiredSkillInput}
-                    onChange={(e) => setRequiredSkillInput(e.target.value)}
-                  />
+                  <Input value={requiredSkillInput} onChange={(e) => setRequiredSkillInput(e.target.value)} />
                   <Button type="button" onClick={addRequiredSkill} variant="outline">Add</Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {form.watch("required_skills").map(s => (
-                    <Badge key={s} className="bg-purple-100 text-purple-700 hover:bg-purple-200" onClick={() => removeRequiredSkill(s)}>
-                      {s} ×
-                    </Badge>
+                  {form.watch("required_skills")?.map(s => (
+                    <Badge key={s} className="bg-purple-100 text-purple-700" onClick={() => removeRequiredSkill(s)}>{s} ×</Badge>
                   ))}
-                </div>
-                <FormMessage>{form.formState.errors.required_skills?.message}</FormMessage>
-
-                <div className="pt-4 flex items-center gap-2">
-                  <Info className="h-4 w-4 text-gray-400" />
-                  <p className="text-sm text-gray-500">Add preferred skills to improve ATS matching accuracy.</p>
                 </div>
               </CardContent>
             </Card>
 
             <div className="flex justify-end gap-4 pb-12">
               <Link href="/employer/profile"><Button type="button" variant="ghost">Cancel</Button></Link>
-              <Button type="submit" size="lg" className="bg-purple-600 hover:bg-purple-700 px-8" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Post Job & Build Pipeline"}
+              <Button type="submit" size="lg" className="bg-purple-600 hover:bg-purple-700 px-8" disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <><Save className="h-4 w-4 mr-2" /> Update Job</>}
               </Button>
             </div>
           </form>
