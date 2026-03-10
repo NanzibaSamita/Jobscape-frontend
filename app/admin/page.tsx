@@ -27,7 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 interface Stats {
   total_users: number;
@@ -56,6 +57,7 @@ export default function AdminDashboard() {
   const [pendingEmployers, setPendingEmployers] = useState<Employer[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
     checkAdminAuth();
@@ -102,7 +104,11 @@ export default function AdminDashboard() {
       setPendingEmployers(employersRes.data);
     } catch (error: any) {
       console.error("Failed to fetch dashboard data:", error);
-      toast.error("Failed to load dashboard data");
+      dispatch(showAlert({
+        title: "Load Error",
+        message: "Failed to load dashboard data",
+        type: "error"
+      }));
     } finally {
       setLoadingStats(false);
     }
@@ -116,19 +122,21 @@ export default function AdminDashboard() {
         verification_tier: approve ? "FULLY_VERIFIED" : "REJECTED"
       });
 
-      toast.success(
-        approve 
-          ? "Employer verified successfully!" 
-          : "Employer verification rejected"
-      );
+      dispatch(showAlert({
+        title: "Success",
+        message: approve ? "Employer verified successfully!" : "Employer verification rejected",
+        type: approve ? "success" : "info"
+      }));
 
       // Refresh data
       fetchDashboardData();
     } catch (error: any) {
       console.error("Verification failed:", error);
-      toast.error(
-        error?.response?.data?.detail || "Failed to verify employer"
-      );
+      dispatch(showAlert({
+        title: "Verification Error",
+        message: error?.response?.data?.detail || "Failed to verify employer",
+        type: "error"
+      }));
     } finally {
       setVerifyingId(null);
     }

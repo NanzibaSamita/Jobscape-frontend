@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Briefcase, Globe } from "lucide-react"
-import { toast } from "react-toastify"
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
-import { api } from "@/lib/axios/axios"
+import axiosInstance from "@/lib/axios/axios";
 
 type FormData = {
     name: string
@@ -47,6 +48,7 @@ interface EditCompanyDialogProps {
 
 export function EditCompanyDialog({ company, open, onOpenChange, onSuccess, sectors, countries }: EditCompanyDialogProps) {
     const [loading, setLoading] = useState(false)
+    const dispatch = useAppDispatch()
     const {
         register,
         handleSubmit,
@@ -79,14 +81,22 @@ export function EditCompanyDialog({ company, open, onOpenChange, onSuccess, sect
             if (data.logo) {
                 formData.append("logo", data.logo);
             }
-            // Use wrapped axios instance (api)
-            await api.post(`/api/v1/companies/${company.id}`, formData);
-            toast.success("Company updated successfully");
+            // Use wrapped axios instance
+            await axiosInstance.post(`/api/v1/companies/${company.id}`, formData);
+            dispatch(showAlert({
+                title: "Success",
+                message: "Company updated successfully",
+                type: "success"
+            }));
             onSuccess();
             reset();
             onOpenChange(false);
         } catch (error) {
-            toast.error("Failed to update company. Please try again.");
+            dispatch(showAlert({
+                title: "Error",
+                message: "Failed to update company. Please try again.",
+                type: "error"
+            }));
             console.error("Update error:", error);
         } finally {
             setLoading(false);

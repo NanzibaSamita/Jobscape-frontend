@@ -2,6 +2,7 @@ import { combineReducers, configureStore } from "@reduxjs/toolkit"
 import { type TypedUseSelectorHook, useDispatch, useSelector } from "react-redux"
 import authSlice from "./slices/authSlice"
 import appSlice from "./slices/appSlice"
+import notificationSlice from "./slices/notificationSlice"
 import {
   persistReducer,
   persistStore,
@@ -22,6 +23,7 @@ const persistConfig: any = {
 const rootReducer = combineReducers({
   auth: authSlice,
   app: appSlice,
+  notification: notificationSlice,
 });
 const persistedReducer = persistReducer(persistConfig, rootReducer);
 export const store = configureStore({

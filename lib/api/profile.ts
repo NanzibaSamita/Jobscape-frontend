@@ -23,6 +23,10 @@ export interface JobSeekerProfile {
   github_url?: string | null;
   portfolio_url?: string | null;
   other_links: string[];
+  is_employed: boolean;
+  current_job_id?: string | null;
+  current_employer_name?: string | null;
+  hired_at?: string | null;
 }
 
 export interface UserProfileResponse {
@@ -97,6 +101,22 @@ export async function uploadProfilePicture(file: File): Promise<{ message: strin
  */
 export async function removeProfilePicture(): Promise<{ message: string }> {
   const response = await axiosInstance.delete("/profile/profile-picture");
+  return response.data;
+}
+
+/**
+ * Fetch public job seeker profile (for employers)
+ */
+export async function getPublicJobSeekerProfile(seekerId: string): Promise<JobSeekerProfile> {
+  const response = await axiosInstance.get(`/profile/job-seeker/${seekerId}`);
+  return response.data;
+}
+
+/**
+ * Track that an employer viewed a seeker's profile
+ */
+export async function trackProfileView(seekerId: string): Promise<any> {
+  const response = await axiosInstance.post(`/profile/job-seeker/${seekerId}/view`);
   return response.data;
 }
 

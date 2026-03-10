@@ -1,14 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Briefcase, FileText } from "lucide-react";
-import { toast } from "react-toastify";
+import { LogOut, User, Briefcase, FileText, MessageSquare, Bell } from "lucide-react";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
+import { NotificationTray } from "@/components/notifications/NotificationTray";
 
 export default function JobSeekerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const dispatch = useAppDispatch();
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const handleLogout = async () => {
     // ✅ Clear all storage
@@ -23,7 +29,11 @@ export default function JobSeekerLayout({ children }: { children: React.ReactNod
     }
 
     // ✅ Show success message
-    toast.success("Logged out successfully");
+    dispatch(showAlert({
+      title: "Success",
+      message: "Logged out successfully",
+      type: "success"
+    }));
 
     // ✅ Hard redirect to login (bypasses cache)
     window.location.href = "/login";
@@ -33,6 +43,7 @@ export default function JobSeekerLayout({ children }: { children: React.ReactNod
     { href: "/jobseeker/profile", label: "Profile", icon: User },
     { href: "/jobs", label: "Browse Jobs", icon: Briefcase },
     { href: "/jobseeker/applications", label: "My Applications", icon: FileText },
+    { href: "/jobseeker/messages", label: "Messages", icon: MessageSquare },
   ];
 
   return (
@@ -69,6 +80,28 @@ export default function JobSeekerLayout({ children }: { children: React.ReactNod
                 );
               })}
 
+              {/* Notification Bell */}
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative rounded-full border"
+                  onClick={() => setIsNotificationOpen(!isNotificationOpen)}
+                >
+                  {unreadCount > 0 && (
+                    <span className="w-[18px] h-[18px] rounded-full bg-red-600 absolute -top-1 -right-1 flex items-center justify-center border-2 border-white text-[10px] text-white font-bold">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                  <Bell className="h-4 w-4" />
+                </Button>
+                <NotificationTray
+                  isOpen={isNotificationOpen}
+                  onClose={() => setIsNotificationOpen(false)}
+                  onUnreadCountChange={setUnreadCount}
+                />
+              </div>
+
               {/* Logout Button */}
               <Button
                 variant="ghost"
@@ -89,25 +122,4 @@ export default function JobSeekerLayout({ children }: { children: React.ReactNod
     </div>
   );
 }
-
-const handleLogout = async () => {
-  try {
-    // ✅ Clear server-side cookies FIRST
-    await fetch("/api/logout", { method: "POST" });
-  } catch (error) {
-    console.error("Logout API error:", error);
-  }
-
-  // ✅ Clear all client storage
-  localStorage.clear();
-  sessionStorage.clear();
-
-  // ✅ Show success message
-  toast.success("Logged out successfully");
-
-  // ✅ Hard redirect to login
-  setTimeout(() => {
-    window.location.href = "/login";
-  }, 100); // Small delay to ensure cleanup completes
-};
 

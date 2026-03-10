@@ -1,4 +1,14 @@
 import { axiosInstance } from "@/lib/axios/axios";
+
+export interface EmployerSnippet {
+  id: string;
+  full_name: string;
+  job_title?: string;
+  logo_url?: string;
+  company_name: string;
+  verification_tier: string;
+}
+
 export interface Job {
   id: string;
   employer_id: string;
@@ -19,6 +29,29 @@ export interface Job {
   created_at: string;
   updated_at: string;
   company_name?: string;
+  posted_by?: EmployerSnippet;
+  hiring_policy?: string;
+  ats_threshold: number;
+}
+
+export interface SelectionRound {
+  number: number;
+  type: string;
+  title: string;
+  description?: string;
+  duration_minutes?: number;
+  is_online: boolean;
+  location_or_link?: string;
+  time_limit_minutes?: number;
+  instructions?: string;
+}
+
+export interface SelectionProcess {
+  id: string;
+  job_id: string;
+  rounds: SelectionRound[];
+  instructions?: string;
+  created_at: string;
 }
 
 export interface JobSearchParams {
@@ -29,7 +62,13 @@ export interface JobSearchParams {
   job_type?: string;
   experience_level?: string;
   salary_min?: number;
+  salary_max?: number;
   fresh_grad_friendly?: boolean;
+  industry?: string;
+  company_size?: string;
+  verification_tier?: string;
+  posted_within_days?: number;
+  sort_by?: "recent" | "salary_high" | "salary_low";
   skip?: number;
   limit?: number;
 }

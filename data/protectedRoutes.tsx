@@ -12,6 +12,11 @@ export interface ProtectedRoute {
 
 const routes: ProtectedRoute[] = [
   {
+    route: "/employer/public",
+    authOnly: false,
+    availableFor: [], // anyone can view
+  },
+  {
     route: "/employer",
     authOnly: true,
     availableFor: ["EMPLOYER"],

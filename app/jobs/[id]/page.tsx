@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { toast } from "react-toastify";
-import { getJobById, Job } from "@/lib/api/jobs";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
+import { getJobById, Job, SelectionProcess, searchJobs } from "@/lib/api/jobs";
 import { applyToJob } from "@/lib/api/applications";
 import { getCoverLetters, CoverLetter, createCoverLetter } from "@/lib/api/coverletters";
 import { getMyResumes, Resume } from "@/lib/api/resume";
@@ -39,21 +40,35 @@ import {
   Sparkles,
   Save,
   MapPin,
+  ChevronRight,
+  ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
-import UploadFile from "@/app/signup/comps/UploadFile" // Your existing upload component
-import { reUploadResume } from "@/lib/api/resume"; // Add this import
+import UploadFile from "@/app/signup/comps/UploadFile";
+import { reUploadResume } from "@/lib/api/resume";
 
+// ✅ NEW: Import CommuteScore
+import CommuteScore from "@/components/CommuteScore";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const jobId = params.id as string;
+  const dispatch = useAppDispatch();
 
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [applying, setApplying] = useState(false);
+
+  // Selection process & similar jobs
+  const [selectionProcess, setSelectionProcess] = useState<SelectionProcess | null>(null);
+  const [similarJobs, setSimilarJobs] = useState<Job[]>([]);
+
+  // ✅ NEW: State for user's location
+  const [userLocation, setUserLocation] = useState<string | undefined>(undefined);
 
   // Application form state
   const [resumes, setResumes] = useState<Resume[]>([]);
@@ -63,10 +78,10 @@ export default function JobDetailPage() {
   const [selectedCoverLetterId, setSelectedCoverLetterId] = useState("");
   const [uploadingResume, setUploadingResume] = useState(false);
   const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
-  
+
   // AI generation state
   const [generatingAI, setGeneratingAI] = useState(false);
-  
+
   // Save cover letter state
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [coverLetterTitle, setCoverLetterTitle] = useState("");
@@ -74,6 +89,7 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     fetchJobDetails();
+    fetchUserLocation();
   }, [jobId]);
 
   async function fetchJobDetails() {
@@ -81,57 +97,109 @@ export default function JobDetailPage() {
       setLoading(true);
       const data = await getJobById(jobId);
       setJob(data);
+
+      // Fetch selection process (silent fail)
+      try {
+        const token = localStorage.getItem("access_token");
+        const selRes = await fetch(`${API_BASE}/selection/job/${jobId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (selRes.ok) setSelectionProcess(await selRes.json());
+      } catch { /* silent */ }
+
+      // Fetch similar jobs by first 3 skills
+      try {
+        if (data.required_skills?.length) {
+          const skills = data.required_skills.slice(0, 3).join(",");
+          const sim = await searchJobs({ skills, limit: 4 });
+          setSimilarJobs(sim.items.filter((j) => j.id !== jobId));
+        }
+      } catch { /* silent */ }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to load job details");
+      dispatch(showAlert({
+        title: "Load Error",
+        message: error?.response?.data?.detail || "Failed to load job details",
+        type: "error"
+      }));
       router.push("/jobs");
     } finally {
       setLoading(false);
     }
   }
 
+  // ✅ NEW: Fetch the job seeker's location from their profile
+  async function fetchUserLocation() {
+    try {
+      const token = localStorage.getItem("access_token");
+
+      const res = await fetch(`${API_BASE}/auth/me/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      if (data.role === "jobseeker" && data.profile?.location) {
+        setUserLocation(data.profile.location);
+      }
+    } catch {
+      // silent fail
+    }
+  }
+
   async function openApplyModal() {
     try {
-      // Fetch user's resumes
       const resumesData = await getMyResumes();
       setResumes(resumesData.resumes);
-      
-      // Set primary resume as default
+
       const primaryResume = resumesData.resumes.find((r) => r.is_primary);
       if (primaryResume) {
         setSelectedResumeId(primaryResume.id);
       }
 
-      // Fetch user's cover letters
       const letters = await getCoverLetters();
       setCoverLetters(letters);
 
       setIsApplyModalOpen(true);
     } catch (error: any) {
-      toast.error("Failed to load application data");
+      dispatch(showAlert({
+        title: "Data Error",
+        message: "Failed to load application data",
+        type: "error"
+      }));
       setIsApplyModalOpen(true);
     }
   }
 
   async function handleResumeUpload(file: File) {
     if (!file) return;
-    
+
     try {
       setUploadingResume(true);
       const result = await reUploadResume(file);
-      toast.success(result.message || "Resume uploaded successfully!");
-      
-      // Refresh resumes list and select the new one
+      dispatch(showAlert({
+        title: "Success",
+        message: result.message || "Resume uploaded successfully!",
+        type: "success"
+      }));
+
       const resumesData = await getMyResumes();
       setResumes(resumesData.resumes);
-      
-      // Set the newly uploaded resume as selected (it should be primary)
+
       const primaryResume = resumesData.resumes.find((r) => r.is_primary);
       if (primaryResume) {
         setSelectedResumeId(primaryResume.id);
-        setNewResumeFile(null); // Clear the temp file
+        setNewResumeFile(null);
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to upload resume");
+      dispatch(showAlert({
+        title: "Upload Error",
+        message: error?.response?.data?.detail || "Failed to upload resume",
+        type: "error"
+      }));
     } finally {
       setUploadingResume(false);
     }
@@ -154,10 +222,18 @@ export default function JobDetailPage() {
       setGeneratingAI(true);
       const result = await generateCoverLetter(jobId);
       setCoverLetterText(result.cover_letter);
-      setSelectedCoverLetterId(""); // Clear saved letter selection
-      toast.success("AI cover letter generated!");
+      setSelectedCoverLetterId("");
+      dispatch(showAlert({
+        title: "AI Generated",
+        message: "AI cover letter generated!",
+        type: "success"
+      }));
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to generate cover letter");
+      dispatch(showAlert({
+        title: "Generation Error",
+        message: error?.response?.data?.detail || "Failed to generate cover letter",
+        type: "error"
+      }));
     } finally {
       setGeneratingAI(false);
     }
@@ -165,7 +241,11 @@ export default function JobDetailPage() {
 
   async function handleSaveCoverLetter() {
     if (!coverLetterTitle.trim()) {
-      toast.error("Please enter a title for the cover letter");
+      dispatch(showAlert({
+        title: "Missing Title",
+        message: "Please enter a title for the cover letter",
+        type: "error"
+      }));
       return;
     }
 
@@ -175,15 +255,22 @@ export default function JobDetailPage() {
         title: coverLetterTitle,
         content: coverLetterText,
       });
-      toast.success("Cover letter saved!");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Cover letter saved!",
+        type: "success"
+      }));
       setShowSaveDialog(false);
       setCoverLetterTitle("");
-      
-      // Refresh cover letters list
+
       const letters = await getCoverLetters();
       setCoverLetters(letters);
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to save cover letter");
+      dispatch(showAlert({
+        title: "Save Error",
+        message: error?.response?.data?.detail || "Failed to save cover letter",
+        type: "error"
+      }));
     } finally {
       setSavingCoverLetter(false);
     }
@@ -191,7 +278,11 @@ export default function JobDetailPage() {
 
   async function handleApply() {
     if (!selectedResumeId) {
-      toast.error("Please select a resume");
+      dispatch(showAlert({
+        title: "Missing Resume",
+        message: "Please select a resume",
+        type: "error"
+      }));
       return;
     }
 
@@ -202,11 +293,19 @@ export default function JobDetailPage() {
         resume_id: selectedResumeId,
         cover_letter: coverLetterText || undefined,
       });
-      toast.success("Application submitted successfully!");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Application submitted successfully!",
+        type: "success"
+      }));
       setIsApplyModalOpen(false);
       router.push("/jobseeker/applications");
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to submit application");
+      dispatch(showAlert({
+        title: "Apply Error",
+        message: error?.response?.data?.detail || "Failed to submit application",
+        type: "error"
+      }));
     } finally {
       setApplying(false);
     }
@@ -238,7 +337,20 @@ export default function JobDetailPage() {
           <CardHeader>
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <CardTitle className="text-3xl mb-2">{job.title}</CardTitle>
+                <div className="flex items-center gap-3 flex-wrap mb-2">
+                  <CardTitle className="text-3xl">{job.title}</CardTitle>
+                  {/* Closing Soon badge */}
+                  {(() => {
+                    const daysLeft = Math.ceil(
+                      (new Date(job.application_deadline).getTime() - Date.now()) / 86400000
+                    );
+                    return daysLeft > 0 && daysLeft <= 3 ? (
+                      <Badge className="bg-red-100 text-red-700 border-0 animate-pulse">
+                        Closing in {daysLeft} day{daysLeft === 1 ? "" : "s"}
+                      </Badge>
+                    ) : null;
+                  })()}
+                </div>
                 <div className="flex items-center gap-2 text-lg text-gray-600">
                   <Building className="h-5 w-5" />
                   {job.company_name || "Company Name"}
@@ -322,6 +434,41 @@ export default function JobDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Posted By Card */}
+        {job.posted_by && (
+          <Card
+            className="mb-6 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => router.push(`/employer/public/${job.posted_by!.id}`)}
+          >
+            <CardContent className="pt-4">
+              <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">
+                Posted By
+              </p>
+              <div className="flex items-center gap-3">
+                {job.posted_by.logo_url ? (
+                  <img
+                    src={job.posted_by.logo_url}
+                    alt="logo"
+                    className="w-12 h-12 rounded-full object-cover border"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+                    <Building className="h-6 w-6 text-purple-600" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900">{job.posted_by.full_name}</p>
+                  {job.posted_by.job_title && (
+                    <p className="text-sm text-gray-500">{job.posted_by.job_title}</p>
+                  )}
+                  <p className="text-sm text-purple-600">{job.posted_by.company_name}</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-gray-400" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Job Description */}
         <Card className="mb-6">
           <CardHeader>
@@ -357,7 +504,7 @@ export default function JobDetailPage() {
 
         {/* Preferred Skills */}
         {job.preferred_skills.length > 0 && (
-          <Card>
+          <Card className="mb-6">
             <CardHeader>
               <CardTitle>Preferred Skills</CardTitle>
             </CardHeader>
@@ -372,9 +519,97 @@ export default function JobDetailPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Selection Process */}
+        {selectionProcess && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-purple-600" />
+                Selection Process
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {selectionProcess.rounds.map((round) => (
+                  <div
+                    key={round.number}
+                    className="flex gap-3 p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      {round.number}
+                    </div>
+                    <div>
+                      <p className="font-medium">{round.title}</p>
+                      <p className="text-sm text-purple-600 capitalize">{round.type}</p>
+                      {round.description && (
+                        <p className="text-sm text-gray-600 mt-1">{round.description}</p>
+                      )}
+                      <div className="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
+                        {round.duration_minutes && (
+                          <span>{round.duration_minutes} min</span>
+                        )}
+                        <span>{round.is_online ? "Online" : "In-Person"}</span>
+                        {round.location_or_link && (
+                          <span>{round.location_or_link}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {selectionProcess.instructions && (
+                <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <p className="text-sm font-medium text-amber-800">Additional Instructions</p>
+                  <p className="text-sm text-amber-700 mt-1">{selectionProcess.instructions}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Commute Estimate */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Commute Estimate</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CommuteScore
+              jobLocation={job.location}
+              workMode={job.work_mode}
+              jobType={job.job_type}
+              userLocation={userLocation}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Similar Jobs */}
+        {similarJobs.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Similar Jobs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {similarJobs.map((sj) => (
+                <Link key={sj.id} href={`/jobs/${sj.id}`}>
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-purple-200 hover:bg-purple-50/30 transition-colors cursor-pointer">
+                    <div>
+                      <p className="font-medium text-gray-900 text-sm">{sj.title}</p>
+                      <p className="text-xs text-gray-500">
+                        {sj.company_name} • {sj.location}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
       </div>
 
-      {/* Apply Modal */}
+      {/* Apply Modal — unchanged */}
       <Dialog open={isApplyModalOpen} onOpenChange={setIsApplyModalOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -385,22 +620,18 @@ export default function JobDetailPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Resume Selection + Upload */}
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Resume <span className="text-red-500">*</span>
               </label>
-              
-              {/* Upload Section */}
+
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 transition-colors">
                 <UploadFile
                   loading={uploadingResume}
-                  onFileUploaded={handleResumeUpload}
-                  className="max-w-md mx-auto"
+                  onFileUploaded={(file) => file && handleResumeUpload(file)}
                 />
               </div>
-              
-              {/* Existing Resumes Dropdown */}
+
               {resumes.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
@@ -414,8 +645,12 @@ export default function JobDetailPage() {
                     <SelectContent>
                       {resumes.map((resume) => (
                         <SelectItem key={resume.id} value={resume.id}>
-                          {resume.filename} 
-                          {resume.is_primary && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Primary</span>}
+                          {resume.filename}
+                          {resume.is_primary && (
+                            <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                              Primary
+                            </span>
+                          )}
                           <span className="ml-2 text-xs text-gray-500">
                             {new Date(resume.uploaded_at).toLocaleDateString()}
                           </span>
@@ -425,7 +660,7 @@ export default function JobDetailPage() {
                   </Select>
                 </div>
               )}
-              
+
               {resumes.length === 0 && !uploadingResume && (
                 <p className="text-xs text-gray-500 text-center">
                   No resumes found. Upload one above to continue.
@@ -433,7 +668,6 @@ export default function JobDetailPage() {
               )}
             </div>
 
-            {/* Cover Letter Selection */}
             {coverLetters.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -458,7 +692,6 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            {/* AI Generate Button */}
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -474,7 +707,7 @@ export default function JobDetailPage() {
                 )}
                 {generatingAI ? "Generating..." : "AI Generate Cover Letter"}
               </Button>
-              
+
               {coverLetterText.length > 50 && (
                 <Button
                   type="button"
@@ -487,7 +720,6 @@ export default function JobDetailPage() {
               )}
             </div>
 
-            {/* Cover Letter Text */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Cover Letter (Optional)
@@ -532,7 +764,7 @@ export default function JobDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Save Cover Letter Dialog */}
+      {/* Save Cover Letter Dialog — unchanged */}
       <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
         <DialogContent>
           <DialogHeader>
@@ -562,10 +794,7 @@ export default function JobDetailPage() {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleSaveCoverLetter}
-              disabled={savingCoverLetter}
-            >
+            <Button onClick={handleSaveCoverLetter} disabled={savingCoverLetter}>
               {savingCoverLetter ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation"; // ✅ MUST IMPORT THIS
 import { getUserProfile, JobSeekerProfile } from "@/lib/api/profile";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 import Header from "./Header";
 import Skills from "./Skills";
@@ -20,6 +21,7 @@ import Links from "./Links";
 export default function Page() {
   const [profile, setProfile] = useState<JobSeekerProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const dispatch = useAppDispatch();
   const router = useRouter(); // ✅ MUST ADD THIS
 
   useEffect(() => {
@@ -48,9 +50,11 @@ export default function Page() {
           return;
         }
         
-        toast.error(
-          error?.response?.data?.detail || "Failed to load profile"
-        );
+        dispatch(showAlert({
+          title: "Profile Error",
+          message: error?.response?.data?.detail || "Failed to load profile",
+          type: "error"
+        }));
       } finally {
         setLoading(false);
       }
@@ -84,7 +88,24 @@ export default function Page() {
     <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
       <div className="max-w-4xl mx-auto space-y-4">
         {/* Header with name and location */}
-        <Header name={profile.full_name} location={profile.location} />
+        <Header
+          name={profile.full_name}
+          location={profile.location ?? undefined}
+          profilePictureUrl={profile.profile_picture_url}
+          profileData={{
+            profile_picture_url: profile.profile_picture_url,
+            professional_summary: profile.professional_summary ?? undefined,
+            skills: profile.skills,
+            experience: profile.experience,
+            education: profile.education,
+            linkedin_url: profile.linkedin_url ?? undefined,
+            phone: (profile as any).phone ?? undefined,
+            projects: profile.projects,
+            certifications: profile.certifications,
+            is_employed: profile.is_employed,
+            current_employer_name: profile.current_employer_name,
+          }}
+        />
 
         {/* Profile sections */}
         <div className="bg-white rounded-xl p-6 space-y-6">

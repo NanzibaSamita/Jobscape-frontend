@@ -25,7 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { axiosInstance } from "@/lib/axios/axios";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 import { Loader2 } from "lucide-react";
 import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton";
 
@@ -53,6 +54,7 @@ type CompleteRegistrationValues = z.infer<typeof completeRegistrationSchema>;
 export default function CompleteEmployerRegistrationPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const dispatch = useAppDispatch();
   const [companyType, setCompanyType] = useState<"REGISTERED" | "STARTUP">("REGISTERED");
 
   const form = useForm<CompleteRegistrationValues>({
@@ -77,7 +79,11 @@ export default function CompleteEmployerRegistrationPage() {
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      toast.error("Please log in first");
+      dispatch(showAlert({
+        title: "Authentication Required",
+        message: "Please log in first",
+        type: "error"
+      }));
       router.push("/login");
     }
   }, [router]);
@@ -105,8 +111,11 @@ export default function CompleteEmployerRegistrationPage() {
       console.log("📤 Sending payload:", payload);
 
       const response = await axiosInstance.post("/employer/register/complete", payload);
-
-      toast.success("Registration completed successfully!");
+      dispatch(showAlert({
+        title: "Success",
+        message: "Registration completed successfully!",
+        type: "success"
+      }));
 
       // ✅ Store the access token if returned
       if (response.data?.access_token) {
@@ -122,13 +131,25 @@ export default function CompleteEmployerRegistrationPage() {
       if (error?.response?.data?.detail) {
         if (Array.isArray(error.response.data.detail)) {
           error.response.data.detail.forEach((err: any) => {
-            toast.error(`${err.loc?.join(" → ")}: ${err.msg}`);
+            dispatch(showAlert({
+              title: "Registration Error",
+              message: `${err.loc?.join(" → ")}: ${err.msg}`,
+              type: "error"
+            }));
           });
         } else {
-          toast.error(error.response.data.detail);
+          dispatch(showAlert({
+            title: "Registration Error",
+            message: error.response.data.detail,
+            type: "error"
+          }));
         }
       } else {
-        toast.error("Failed to complete registration");
+        dispatch(showAlert({
+          title: "Registration Error",
+          message: "Failed to complete registration",
+          type: "error"
+        }));
       }
     } finally {
       setIsLoading(false);

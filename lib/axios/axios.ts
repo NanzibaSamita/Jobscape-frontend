@@ -101,6 +101,27 @@ axiosInstance.interceptors.response.use(
     }
     // ===============================================
 
+    // ✅ Global Error Alert (except for specific statuses if needed)
+    if (err?.response?.status !== 401) {
+      const { store } = require("@/lib/store");
+      const { showAlert } = require("@/lib/store/slices/notificationSlice");
+      
+      let message = "An unexpected error occurred. Please try again.";
+      if (err?.response?.data?.detail) {
+        message = Array.isArray(err.response.data.detail) 
+          ? err.response.data.detail[0].msg 
+          : err.response.data.detail;
+      } else if (err?.message) {
+        message = err.message;
+      }
+
+      store.dispatch(showAlert({
+        title: "API Error",
+        message,
+        type: "error"
+      }));
+    }
+
     return Promise.reject(err);
   }
 );

@@ -17,6 +17,9 @@ export interface Application {
   status: ApplicationStatus;
   cover_letter: string | null;
   match_score: number;
+  ats_score: number;
+  ats_report?: string;
+  current_round: number;
   applied_at: string;
   updated_at: string;
   // Enriched fields from backend
@@ -24,6 +27,14 @@ export interface Application {
   company_name?: string;
   applicant_name?: string;
   applicant_email?: string;
+  // Booked interview slot
+  booked_slot_id?: string | null;
+  booked_slot_datetime?: string | null;
+  booked_slot_duration_minutes?: number | null;
+  booked_slot_location?: string | null;
+  booked_slot_style?: string | null;
+  booked_slot_meeting_link?: string | null;
+  interview_schedule_id?: string | null;
 }
 
 export interface ApplicationDetail extends Application {
@@ -33,6 +44,13 @@ export interface ApplicationDetail extends Application {
   interview_notes: string | null;
   rejection_reason: string | null;
   rejected_at: string | null;
+  // Booked FCFS interview slot
+  booked_slot_id: string | null;
+  booked_slot_datetime: string | null;
+  booked_slot_duration_minutes: number | null;
+  booked_slot_location: string | null;
+  booked_slot_style: string | null;
+  booked_slot_meeting_link: string | null;
 }
 
 export interface CreateApplicationData {
@@ -79,6 +97,14 @@ export async function getApplicationById(applicationId: string): Promise<Applica
 }
 
 /**
+ * Advance an application to the next round (Employer)
+ */
+export async function advanceApplication(applicationId: string): Promise<Application> {
+  const response = await axiosInstance.post(`/applications/${applicationId}/advance`);
+  return response.data;
+}
+
+/**
  * Withdraw an application (Job Seeker)
  */
 export async function withdrawApplication(applicationId: string): Promise<Application> {
@@ -92,11 +118,13 @@ export async function withdrawApplication(applicationId: string): Promise<Applic
 export async function getJobApplications(
   job_id: string,
   status?: string,
-  minMatchScore?: number
+  minMatchScore?: number,
+  minAtsScore?: number
 ): Promise<Application[]> {
   const params: any = {};
   if (status) params.status = status;
   if (minMatchScore !== undefined && minMatchScore !== null) params.min_match_score = minMatchScore;
+  if (minAtsScore !== undefined && minAtsScore !== null) params.min_ats_score = minAtsScore;
 
   const response = await axiosInstance.get(`/applications/job/${job_id}/applications`, { params });
   return response.data;
