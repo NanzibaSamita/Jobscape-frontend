@@ -102,6 +102,8 @@ export default function Page() {
             phone: (profile as any).phone ?? undefined,
             projects: profile.projects,
             certifications: profile.certifications,
+            is_employed: profile.is_employed,
+            current_employer_name: profile.current_employer_name,
           }}
         />
 

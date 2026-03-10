@@ -181,23 +181,50 @@ export default function InterviewsPage() {
                   <StyleIcon className="h-4 w-4 text-violet-500 shrink-0" />
                   <span className="font-medium">{STYLE_LABELS[iv.style] || iv.style}</span>
                   {iv.location && <span className="text-gray-500">— {iv.location}</span>}
-                  {iv.meeting_link && (
-                    <a href={iv.meeting_link} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline ml-1">
-                      Join link →
+                  
+                  {/* External Link Fix: Only show if it's a valid absolute URL */}
+                  {iv.meeting_link && (iv.meeting_link.startsWith("http://") || iv.meeting_link.startsWith("https://")) && (
+                    <a 
+                      href={iv.meeting_link} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-violet-600 hover:underline ml-1 inline-flex items-center gap-1"
+                    >
+                      <Video className="h-3 w-3" />
+                      External Join link →
                     </a>
+                  )}
+                  {/* If it's not a link, just show it as text instructions if relevant */}
+                  {iv.meeting_link && !(iv.meeting_link.startsWith("http://") || iv.meeting_link.startsWith("https://")) && (
+                    <span className="text-gray-400 text-xs italic ml-1">({iv.meeting_link})</span>
                   )}
                 </div>
 
-                {/* Confirmed slot */}
+                {/* Confirmed slot & Join Button */}
                 {iv.is_confirmed && iv.confirmed_at && (
-                  <div className="rounded-xl bg-emerald-100/50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-3.5">
-                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span className="text-sm font-medium">Your confirmed time:</span>
+                  <div className="rounded-xl bg-emerald-100/50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span className="text-sm font-medium">Your confirmed time:</span>
+                      </div>
+                      <p className="mt-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                        {formatDateTime(iv.confirmed_at)}
+                      </p>
                     </div>
-                    <p className="mt-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                      {formatDateTime(iv.confirmed_at)}
-                    </p>
+
+                    {iv.style === "video_call" && (
+                      <button
+                        onClick={() => {
+                          const internalPath = iv.meeting_link?.startsWith('/') ? iv.meeting_link : `/interview/${iv.schedule_id}`;
+                          window.location.href = internalPath;
+                        }}
+                        className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold shadow-lg shadow-violet-500/20 transition-all shrink-0"
+                      >
+                        <Video className="h-4 w-4" />
+                        Join Video Room
+                      </button>
+                    )}
                   </div>
                 )}
 

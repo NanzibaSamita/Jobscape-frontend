@@ -27,6 +27,14 @@ export interface Application {
   company_name?: string;
   applicant_name?: string;
   applicant_email?: string;
+  // Booked interview slot
+  booked_slot_id?: string | null;
+  booked_slot_datetime?: string | null;
+  booked_slot_duration_minutes?: number | null;
+  booked_slot_location?: string | null;
+  booked_slot_style?: string | null;
+  booked_slot_meeting_link?: string | null;
+  interview_schedule_id?: string | null;
 }
 
 export interface ApplicationDetail extends Application {
@@ -36,6 +44,13 @@ export interface ApplicationDetail extends Application {
   interview_notes: string | null;
   rejection_reason: string | null;
   rejected_at: string | null;
+  // Booked FCFS interview slot
+  booked_slot_id: string | null;
+  booked_slot_datetime: string | null;
+  booked_slot_duration_minutes: number | null;
+  booked_slot_location: string | null;
+  booked_slot_style: string | null;
+  booked_slot_meeting_link: string | null;
 }
 
 export interface CreateApplicationData {

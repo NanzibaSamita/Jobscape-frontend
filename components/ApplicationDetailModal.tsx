@@ -27,7 +27,9 @@ import {
   ArrowRight,
   Megaphone,
   Video,
-  CheckCircle2
+  CheckCircle2,
+  Clock,
+  Calendar
 } from 'lucide-react';
 import axiosInstance from '@/lib/axios/axios';
 import { useAppDispatch } from '@/lib/store';
@@ -54,6 +56,12 @@ interface ApplicationDetails {
       matched_preferred: string[];
       missing_required: string[];
     };
+    booked_slot_id: string | null;
+    booked_slot_datetime: string | null;
+    booked_slot_duration_minutes: number | null;
+    booked_slot_location: string | null;
+    booked_slot_style: string | null;
+    booked_slot_meeting_link: string | null;
   };
   job_seeker: {
     full_name: string;
@@ -196,6 +204,75 @@ export default function ApplicationDetailModal({
 
         <ScrollArea className="h-[calc(90vh-120px)]">
           <div className="p-6 space-y-6">
+            {/* Interview Schedule (if booked) */}
+            {application.status === 'INTERVIEW_SCHEDULED' && application.booked_slot_datetime && (
+              <section className="bg-violet-50/50 dark:bg-violet-900/10 rounded-xl border border-violet-100 dark:border-violet-800/50 p-4">
+                <h3 className="text-sm font-bold text-violet-900 dark:text-violet-100 flex items-center gap-2 mb-3">
+                  <Calendar className="h-4 w-4" />
+                  Interview Schedule
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="h-4 w-4 text-violet-500" />
+                      <span className="font-medium">
+                        {new Date(application.booked_slot_datetime).toLocaleString([], {
+                          weekday: 'short', month: 'short', day: 'numeric',
+                          hour: '2-digit', minute: '2-digit'
+                        })}
+                        {application.booked_slot_duration_minutes && ` (${application.booked_slot_duration_minutes} min)`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm capitalize">
+                      <Video className="h-4 w-4 text-violet-500" />
+                      <span>{application.booked_slot_style?.replace('_', ' ')}</span>
+                    </div>
+                    {application.booked_slot_location && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <MapPin className="h-4 w-4 text-violet-500" />
+                        <span>{application.booked_slot_location}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    {application.booked_slot_meeting_link && (
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] uppercase font-bold text-gray-400">Meeting Link</label>
+                        {(application.booked_slot_meeting_link.startsWith('http://') || application.booked_slot_meeting_link.startsWith('https://')) ? (
+                          <a
+                            href={application.booked_slot_meeting_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-violet-600 hover:underline font-medium flex items-center gap-1"
+                          >
+                            External Meeting Link
+                            <LinkIcon className="h-3 w-3" />
+                          </a>
+                        ) : (
+                          <span className="text-sm text-gray-500 italic">
+                            Provided link: {application.booked_slot_meeting_link}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    
+                    {application.booked_slot_style === 'video_call' && (
+                      <Button 
+                        size="sm" 
+                        variant="default"
+                        className="bg-violet-600 hover:bg-violet-700 text-white shadow-md shadow-violet-500/20"
+                        onClick={() => window.location.href = `/interview/${application.booked_slot_id || applicationId}`}
+                      >
+                        <Video className="h-4 w-4 mr-2" />
+                        Join Video Room
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Contact Information */}
             <section>
               <h3 className="text-lg font-semibold mb-3">Contact Information</h3>

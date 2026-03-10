@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { LogOut, Edit, MapPin, User } from "lucide-react";
+import { LogOut, Edit, MapPin, User, Building2, BadgeCheck } from "lucide-react";
 import { useAppDispatch } from "@/lib/store";
 import { showAlert } from "@/lib/store/slices/notificationSlice";
 
@@ -16,6 +16,8 @@ export interface ProfileData {
   phone?: string;
   projects?: unknown[];
   certifications?: unknown[];
+  is_employed?: boolean;
+  current_employer_name?: string | null;
 }
 
 interface HeaderProps {
@@ -93,6 +95,19 @@ export default function Header({ name, location, profilePictureUrl, profileData 
               <div className="flex items-center gap-1 mt-2 text-gray-600">
                 <MapPin className="h-4 w-4" />
                 <span className="text-sm">{location}</span>
+              </div>
+            )}
+
+            {profileData?.is_employed && (
+              <div className="flex items-center gap-2 mt-2 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-full w-fit">
+                <BadgeCheck className="h-4 w-4 text-emerald-600" />
+                <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                  Currently at {profileData.current_employer_name}
+                </span>
+                <span className="text-[10px] text-gray-400 font-normal ml-1 flex items-center gap-1">
+                  <Building2 className="h-3 w-3" />
+                  Hired via Jobscape
+                </span>
               </div>
             )}
 

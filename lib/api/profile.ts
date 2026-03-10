@@ -23,6 +23,10 @@ export interface JobSeekerProfile {
   github_url?: string | null;
   portfolio_url?: string | null;
   other_links: string[];
+  is_employed: boolean;
+  current_job_id?: string | null;
+  current_employer_name?: string | null;
+  hired_at?: string | null;
 }
 
 export interface UserProfileResponse {

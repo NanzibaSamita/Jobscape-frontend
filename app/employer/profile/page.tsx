@@ -35,6 +35,7 @@ interface EmployerProfile {
   profile_completed: boolean;
   verification_tier: string;
   trust_score: number;
+  verification_badges: string[];
   work_email_verified: boolean;
   logo_url?: string;
 }
@@ -321,12 +322,26 @@ export default function EmployerProfilePage() {
                   </div>
                   
                   <div className="text-center sm:text-right">
-                    <p className="text-sm text-gray-500">Trust Score</p>
-                    <p className="text-2xl font-bold text-purple-600">{profile.trust_score}/100</p>
+                    <p className="text-sm text-gray-500">Trust Level</p>
+                    <p className={`text-xl font-bold ${profile.trust_score >= 80 ? 'text-green-600' : profile.trust_score >= 50 ? 'text-blue-600' : 'text-yellow-600'}`}>
+                      {profile.trust_score >= 90 ? "Highly Trustable ⭐" : 
+                       profile.trust_score >= 70 ? "Trustable" : 
+                       profile.trust_score >= 40 ? "Verified" : "New Employer"}
+                    </p>
                   </div>
                 </div>
 
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                {profile.verification_badges && profile.verification_badges.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {profile.verification_badges.map((badge, index) => (
+                      <Badge key={index} variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        {badge}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
                   <div
                     className="bg-purple-600 h-2 rounded-full transition-all duration-500"
                     style={{ width: `${profile.trust_score}%` }}

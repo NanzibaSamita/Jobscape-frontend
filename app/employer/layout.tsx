@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Bell, Briefcase, InboxIcon, LogOut, User } from "lucide-react";
+import { Bell, Briefcase, Calendar, InboxIcon, LogOut, User } from "lucide-react";
 import { useAppDispatch } from "@/lib/store";
 import { showAlert } from "@/lib/store/slices/notificationSlice";
 import { useState } from "react";
@@ -35,6 +35,7 @@ export default function EmployerLayout({ children }: { children: React.ReactNode
   const navItems = [
     { href: "/employer/profile", label: "Profile", icon: User },
     { href: "/employer/jobs", label: "My Jobs", icon: Briefcase },
+    { href: "/employer/interviews", label: "Interviews", icon: Calendar },
     { href: "/employer/inbox", label: "Inbox", icon: InboxIcon },
     { href: "/jobs", label: "Browse Jobs", icon: Briefcase },
   ];

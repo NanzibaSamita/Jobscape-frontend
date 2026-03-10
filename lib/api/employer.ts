@@ -16,6 +16,7 @@ export interface EmployerPublicBasic {
   company_website?: string;
   verification_tier: string;
   trust_score: number;
+  verification_badges: string[];
   total_job_posts_count: number;
   founded_year?: number;
   created_at: string;

@@ -9,7 +9,7 @@ import {
   Clock, Eye, Users, FileText, ChevronRight, Send,
   Calendar, MessageSquare, Award, Filter, Search,
   AlertCircle, Star, ArrowRight, Megaphone, Video,
-  MapPin, Phone
+  MapPin, Phone, PartyPopper, ClipboardCheck
 } from "lucide-react";
 import { getJobApplications, updateApplicationStatus, type ApplicationStatus } from "@/lib/api/applications";
 import { axiosInstance } from "@/lib/axios/axios";
@@ -22,8 +22,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import ApplicationDetailModal from "@/components/ApplicationDetailModal";
+import ManagePoolModal from "@/components/ManagePoolModal";
 import { useAppDispatch } from "@/lib/store";
 import { showAlert } from "@/lib/store/slices/notificationSlice";
+import InterviewReviewModal from "@/components/InterviewReviewModal";
+import AnnounceSelectionModal from "@/components/AnnounceSelectionModal";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -39,9 +42,15 @@ interface Application {
   ats_score?: number;
   ats_report?: any;
   current_round: number;
+  booked_slot_id?: string | null;
+  booked_slot_datetime?: string | null;
+  booked_slot_duration_minutes?: number | null;
+  booked_slot_location?: string | null;
+  booked_slot_style?: string | null;
+  booked_slot_meeting_link?: string | null;
 }
 
-type FilterType = ApplicationStatus | "ALL";
+type FilterType = ApplicationStatus | "ALL" | "SCHEDULE";
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; dot: string; label: string }> = {
   PENDING:             { color: "text-gray-600",   bg: "bg-gray-100 dark:bg-gray-800",    dot: "bg-gray-400",   label: "Pending" },
@@ -321,8 +330,12 @@ function InterviewModal({ applicationId, open, onClose, onSuccess }: {
   }
 
   async function handleSchedule() {
+    console.log("DEBUG: handleSchedule called. Status of applicationId:", applicationId);
     const validSlots = slots.filter(s => s.datetime);
+    console.log("DEBUG: Number of valid slots:", validSlots.length);
+    
     if (!validSlots.length) {
+      console.warn("DEBUG: No valid slots found. Returning.");
       dispatch(showAlert({
         title: "Validation Error",
         message: "Add at least one time slot",
@@ -330,24 +343,34 @@ function InterviewModal({ applicationId, open, onClose, onSuccess }: {
       }));
       return;
     }
+
     setSending(true);
     try {
-      const res = await fetch(`${API_BASE}/interviews/schedule`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          application_id: applicationId,
-          style,
-          proposed_slots: validSlots.map(s => ({ datetime_utc: new Date(s.datetime).toISOString(), duration_minutes: s.duration })),
-          location: location || undefined,
-          meeting_link: meetingLink || undefined,
-          allow_style_choice: allowStyleChoice,
-          instructions: instructions || undefined,
+      console.log("DEBUG: Constructing payload. Style:", style, "AllowStyleChoice:", allowStyleChoice);
+      const payload = {
+        application_id: applicationId,
+        style,
+        proposed_slots: validSlots.map(s => {
+          const d = new Date(s.datetime);
+          if (isNaN(d.getTime())) {
+             console.error("DEBUG: Invalid date encountered:", s.datetime);
+             throw new Error(`Invalid date format selected: ${s.datetime}`);
+          }
+          return { 
+            datetime_utc: d.toISOString(), 
+            duration_minutes: s.duration 
+          };
         }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
+        location: location || undefined,
+        meeting_link: meetingLink || undefined,
+        allow_style_choice: allowStyleChoice,
+        instructions: instructions || undefined,
+      };
+
+      console.log("DEBUG: Invoking axiosInstance.post('/interviews/schedule') with payload:", payload);
+      const response = await axiosInstance.post(`/interviews/schedule`, payload);
+      console.log("DEBUG: Received success response from server:", response.data);
+      
       dispatch(showAlert({
         title: "Interview scheduled!",
         message: "The candidate has been notified via email",
@@ -356,13 +379,16 @@ function InterviewModal({ applicationId, open, onClose, onSuccess }: {
       onClose();
       onSuccess();
     } catch (err: any) {
+      console.error("DEBUG: Caught error during schedule attempt:", err);
+      const errorMessage = err?.response?.data?.detail || err.message || "An unexpected error occurred. Please check console.";
       dispatch(showAlert({
         title: "Failed to schedule",
-        message: err.message,
+        message: errorMessage,
         type: "error"
       }));
     } finally {
       setSending(false);
+      console.log("DEBUG: handleSchedule execution complete. sending=false");
     }
   }
 
@@ -491,6 +517,9 @@ export default function JobApplicationsPage() {
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [shortlistOpen, setShortlistOpen] = useState(false);
   const [interviewTarget, setInterviewTarget] = useState<string | null>(null);
+  const [poolOpen, setPoolOpen] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<{ id: string; appId: string; name: string } | null>(null);
+  const [announceOpen, setAnnounceOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [minAtsScore, setMinAtsScore] = useState<number>(0);
   const [selectionProcess, setSelectionProcess] = useState<any>(null);
@@ -583,9 +612,13 @@ export default function JobApplicationsPage() {
       
       dispatch(showAlert({
         title: "Interview Started",
-        message: "Candidate has been notified and invitation sent.",
+        message: "Redirecting to video room...",
         type: "success"
       }));
+
+      // Redirect to the new video room page
+      const roomPath = (schedule.meeting_link?.startsWith('/')) ? schedule.meeting_link : `/interview/${schedule.schedule_id}`;
+      router.push(roomPath);
     } catch (err: any) {
       dispatch(showAlert({
         title: "Error starting interview",
@@ -612,6 +645,39 @@ export default function JobApplicationsPage() {
   };
 
   const shortlistedCount = applications.filter(a => a.status === "SHORTLISTED").length;
+
+  // Group scheduled interviews by slot
+  const scheduledApps = applications.filter(a => !!a.booked_slot_id);
+  const slotsMap = new Map<string, {
+    id: string;
+    datetime: string;
+    location: string | null;
+    link: string | null;
+    style: string | null;
+    apps: Application[];
+  }>();
+
+  scheduledApps.forEach(a => {
+    if (!slotsMap.has(a.booked_slot_id!)) {
+      slotsMap.set(a.booked_slot_id!, {
+        id: a.booked_slot_id!,
+        datetime: a.booked_slot_datetime!,
+        location: a.booked_slot_location || null,
+        link: a.booked_slot_meeting_link || null,
+        style: a.booked_slot_style || null,
+        apps: []
+      });
+    }
+    slotsMap.get(a.booked_slot_id!)!.apps.push(a);
+  });
+
+  const groupedSlots = Array.from(slotsMap.values()).sort((a, b) => 
+    new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
+  );
+
+  const pendingScheduling = applications.filter(a => 
+    (a.status === "SHORTLISTED" || a.status === "REVIEWED") && !a.booked_slot_id
+  );
 
   if (loading) {
     return (
@@ -644,6 +710,14 @@ export default function JobApplicationsPage() {
               Auto-Shortlist
             </Button>
             <Button
+              onClick={() => setPoolOpen(true)}
+              variant="outline"
+              className="border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400"
+            >
+              <Calendar className="h-4 w-4 mr-2" />
+              Manage Interview Pool
+            </Button>
+            <Button
               onClick={() => setBroadcastOpen(true)}
               variant="outline"
               className="border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400"
@@ -651,6 +725,15 @@ export default function JobApplicationsPage() {
               <Megaphone className="h-4 w-4 mr-2" />
               Group Message
             </Button>
+            {stats.accepted > 0 && (
+              <Button
+                onClick={() => setAnnounceOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+              >
+                <PartyPopper className="h-4 w-4 mr-2" />
+                Announce Selection
+              </Button>
+            )}
           </div>
         </div>
 
@@ -700,15 +783,132 @@ export default function JobApplicationsPage() {
 
         <Tabs value={filter} onValueChange={v => setFilter(v as FilterType)}>
           <TabsList className="flex flex-wrap h-auto gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl mb-5">
-            {["ALL", "PENDING", "REVIEWED", "SHORTLISTED", "INTERVIEW_SCHEDULED", "ACCEPTED", "REJECTED"].map(tab => (
+            {["ALL", "PENDING", "REVIEWED", "SHORTLISTED", "SCHEDULE", "INTERVIEW_SCHEDULED", "ACCEPTED", "REJECTED"].map(tab => (
               <TabsTrigger key={tab} value={tab} className="text-xs rounded-lg">
-                {tab === "ALL" ? "All" : STATUS_CONFIG[tab]?.label ?? tab}
+                {tab === "ALL" ? "All" : tab === "SCHEDULE" ? "Schedule" : STATUS_CONFIG[tab]?.label ?? tab}
               </TabsTrigger>
             ))}
           </TabsList>
 
           <TabsContent value={filter}>
-            {filteredApps.length === 0 ? (
+            {filter === "SCHEDULE" ? (
+              <div className="space-y-6">
+                {/* Confirmed Interviews Grouped by Slot */}
+                <div className="space-y-4">
+                  <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 px-1">
+                    <Calendar className="h-4 w-4 text-violet-600" />
+                    Confirmed Interview Sessions ({groupedSlots.length})
+                  </h2>
+                  
+                  {groupedSlots.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center bg-white dark:bg-zinc-900/50">
+                      <Clock className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">No confirmed sessions yet</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {groupedSlots.map(slot => (
+                        <Card key={slot.id} className="overflow-hidden border-violet-100 dark:border-violet-900/30 shadow-sm">
+                          <div className="bg-violet-50/50 dark:bg-violet-900/10 px-4 py-3 border-b border-violet-100 dark:border-violet-900/30 flex items-center justify-between flex-wrap gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-lg bg-white dark:bg-zinc-900 border border-violet-200 dark:border-violet-800 flex flex-col items-center justify-center text-violet-700 dark:text-violet-300">
+                                <span className="text-[10px] font-bold uppercase">{new Date(slot.datetime).toLocaleDateString([], { month: 'short' })}</span>
+                                <span className="text-sm font-black leading-none">{new Date(slot.datetime).getDate()}</span>
+                              </div>
+                              <div>
+                                <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                                  {new Date(slot.datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                                  <Badge variant="outline" className="text-[9px] h-4 px-1 py-0 border-violet-200 text-violet-700 bg-violet-50/50">
+                                    {slot.style?.replace('_', ' ') || 'Interview'}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {slot.link && (slot.link.startsWith('http') ? (
+                                <Button size="sm" variant="outline" className="h-8 text-xs border-violet-200 text-violet-700 hover:bg-violet-100" asChild>
+                                  <a href={slot.link} target="_blank" rel="noopener noreferrer">
+                                    <Video className="h-3.5 w-3.5 mr-1.5" />
+                                    Join Meeting
+                                  </a>
+                                </Button>
+                              ) : (
+                                <div className="text-xs text-gray-500 flex items-center gap-1.5 bg-white dark:bg-zinc-900 px-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-800">
+                                  <MapPin className="h-3.5 w-3.5 text-violet-500" />
+                                  {slot.link || slot.location || 'See Instructions'}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div className="p-4">
+                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                              <Users className="h-3 w-3" />
+                              Attendees ({slot.apps.length})
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              {slot.apps.map(app => (
+                                <div 
+                                  key={app.id} 
+                                  onClick={() => setSelectedApplicationId(app.id)}
+                                  className="flex items-center gap-3 p-2 rounded-xl border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer group"
+                                >
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarFallback className="text-[10px] bg-violet-100 text-violet-700">
+                                      {app.applicant_name?.split(' ').map(n=>n[0]).join('').slice(0,2) || '??'}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="text-xs font-semibold text-gray-900 dark:text-gray-100 group-hover:text-violet-600 truncate">
+                                      {app.applicant_name}
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 truncate">{app.applicant_email}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Shortlisted but not yet scheduled */}
+                <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 px-1 mb-4">
+                    <Clock className="h-4 w-4 text-amber-500" />
+                    Pending Scheduling ({pendingScheduling.length})
+                  </h2>
+                  
+                  {pendingScheduling.length === 0 ? (
+                    <p className="text-xs text-center text-gray-400 italic">All shortlisted candidates have booked a slot</p>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {pendingScheduling.map(app => (
+                        <div 
+                          key={app.id}
+                          className="flex items-center justify-between p-3 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-transparent"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="h-6 w-6 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] text-gray-500 font-bold">
+                              {app.applicant_name?.[0] || '?'}
+                            </div>
+                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{app.applicant_name}</span>
+                          </div>
+                          <Badge variant="secondary" className="text-[9px] h-4 bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border-none">
+                            Not attending yet
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : filteredApps.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-16 text-center">
                 <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500 font-medium">No applications found</p>
@@ -774,6 +974,44 @@ export default function JobApplicationsPage() {
                                   {app.current_round > 0 
                                     ? selectionProcess.rounds[app.current_round - 1]?.title 
                                     : "Not Started"}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Confirmed Interview Slot */}
+                            {app.status === "INTERVIEW_SCHEDULED" && app.booked_slot_datetime && (
+                              <div className="mt-3 bg-emerald-50 dark:bg-emerald-900/20 p-2.5 rounded-lg border border-emerald-100 dark:border-emerald-800/50">
+                                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold text-[10px] uppercase tracking-wider mb-2">
+                                  <Calendar className="h-3 w-3" />
+                                  Confirmed Interview
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300">
+                                    <Clock className="h-3.5 w-3.5 text-emerald-500" />
+                                    <span className="font-medium">
+                                      {new Date(app.booked_slot_datetime).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} at {new Date(app.booked_slot_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Link or Location */}
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    {app.booked_slot_meeting_link && (app.booked_slot_meeting_link.startsWith('http://') || app.booked_slot_meeting_link.startsWith('https://')) ? (
+                                      <a 
+                                        href={app.booked_slot_meeting_link} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-medium hover:bg-violet-200 dark:hover:bg-violet-900/60 transition-colors"
+                                      >
+                                        <Video className="h-3.5 w-3.5" />
+                                        Meeting Link
+                                      </a>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 italic">
+                                        <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+                                        {app.booked_slot_meeting_link || app.booked_slot_location || "In Person Interview"}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -861,15 +1099,29 @@ export default function JobApplicationsPage() {
                           )}
 
                           {app.status === "INTERVIEW_SCHEDULED" && (
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleStartInterview(app.id)} 
-                              disabled={startingInterview === app.id} 
-                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                            >
-                              {startingInterview === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5 mr-1" />}
-                              Start Interview
-                            </Button>
+                            <>
+                              <Button 
+                                size="sm" 
+                                onClick={() => handleStartInterview(app.id)} 
+                                disabled={startingInterview === app.id} 
+                                className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                              >
+                                {startingInterview === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5 mr-1" />}
+                                Start Interview
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                   const res = await axiosInstance.get(`/interviews/application/${app.id}`);
+                                   setReviewTarget({ id: res.data.schedule_id, appId: app.id, name });
+                                }}
+                                className="text-xs border-violet-200 text-violet-700 hover:bg-violet-50"
+                              >
+                                <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                                Evaluate
+                              </Button>
+                            </>
                           )}
 
                           {/* Chat button (for reviewed and above) */}
@@ -922,6 +1174,33 @@ export default function JobApplicationsPage() {
           applicationId={interviewTarget!}
           open={!!interviewTarget}
           onClose={() => setInterviewTarget(null)}
+          onSuccess={loadApplications}
+        />
+      )}
+
+      <ManagePoolModal
+        jobId={jobId}
+        isOpen={poolOpen}
+        onClose={() => setPoolOpen(false)}
+      />
+
+      {reviewTarget && (
+        <InterviewReviewModal
+          interviewId={reviewTarget.id}
+          applicationId={reviewTarget.appId}
+          candidateName={reviewTarget.name}
+          isOpen={!!reviewTarget}
+          onClose={() => setReviewTarget(null)}
+          onSuccess={loadApplications}
+        />
+      )}
+
+      {announceOpen && (
+        <AnnounceSelectionModal
+          jobId={jobId}
+          acceptedApplications={applications.filter(a => a.status === "ACCEPTED")}
+          isOpen={announceOpen}
+          onClose={() => setAnnounceOpen(false)}
           onSuccess={loadApplications}
         />
       )}

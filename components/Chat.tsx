@@ -2,7 +2,7 @@
 // components/Chat.tsx — Shared chat component for both employer + job seeker views
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Loader2, MessageSquare, ChevronLeft, Circle } from "lucide-react";
+import { Send, Loader2, MessageSquare, ChevronLeft, Circle, Megaphone } from "lucide-react";
 import { useAppDispatch } from "@/lib/store";
 import { showAlert } from "@/lib/store/slices/notificationSlice";
 
@@ -314,8 +314,30 @@ export default function Chat({ applicationId, currentUserRole, currentUserId }: 
                 const showName = !prevMsg || prevMsg.sender_role !== msg.sender_role;
 
                 if (msg.is_system_message) {
+                  if (msg.sender_role === "employer") {
+                    // Render as Job Announcement
+                    return (
+                      <div key={msg.id} className="flex justify-center my-4">
+                        <div className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-100 dark:border-violet-800/50 rounded-xl p-4 max-w-[85%] shadow-sm">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Megaphone className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                            <span className="text-xs font-bold text-violet-700 dark:text-violet-300 uppercase tracking-wider">
+                              Job Announcement
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                            {msg.content}
+                          </div>
+                          <div className="text-[10px] text-gray-400 mt-2 text-right">
+                            {formatTime(msg.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  // Standard system message
                   return (
-                    <div key={msg.id} className="flex justify-center">
+                    <div key={msg.id} className="flex justify-center my-2">
                       <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
                         {msg.content}
                       </span>
@@ -330,7 +352,7 @@ export default function Chat({ applicationId, currentUserRole, currentUserId }: 
                         <span className="text-xs text-gray-500 ml-1">{msg.sender_name}</span>
                       )}
                       <div className={`
-                        px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed
+                        px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap
                         ${mine
                           ? "bg-violet-600 text-white rounded-br-sm"
                           : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm"
@@ -354,37 +376,57 @@ export default function Chat({ applicationId, currentUserRole, currentUserId }: 
           {/* Input */}
           {activeRoom.is_active ? (
             <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800">
-              <div className="flex items-end gap-2 bg-gray-50 dark:bg-zinc-800 rounded-xl p-2">
-                <textarea
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Write a message... (Enter to send)"
-                  rows={1}
-                  className="flex-1 resize-none bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none py-1.5 px-1 max-h-32"
-                  style={{ height: "auto" }}
-                  onInput={e => {
-                    const el = e.target as HTMLTextAreaElement;
-                    el.style.height = "auto";
-                    el.style.height = Math.min(el.scrollHeight, 128) + "px";
-                  }}
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={!input.trim() || sending}
-                  className={`rounded-lg p-2 transition-all ${
-                    input.trim()
-                      ? "bg-violet-600 hover:bg-violet-700 text-white shadow-sm"
-                      : "bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  {sending
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <Send className="h-4 w-4" />
-                  }
-                </button>
-              </div>
-              <p className="text-[10px] text-gray-400 text-center mt-1.5">Shift+Enter for new line</p>
+              {(() => {
+                const lastMessage = messages[messages.length - 1];
+                const isInputDisabled = currentUserRole === "job_seeker" && lastMessage?.is_system_message && lastMessage?.sender_role === "employer";
+
+                if (isInputDisabled) {
+                  return (
+                    <div className="flex items-center justify-center py-2 bg-gray-50 dark:bg-zinc-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+                      <p className="text-sm text-gray-500 flex items-center gap-2">
+                        <Megaphone className="h-4 w-4" />
+                        Replies to announcements are disabled.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <div className="flex items-end gap-2 bg-gray-50 dark:bg-zinc-800 rounded-xl p-2">
+                      <textarea
+                        value={input}
+                        onChange={e => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Write a message... (Enter to send)"
+                        rows={1}
+                        className="flex-1 resize-none bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none py-1.5 px-1 max-h-32"
+                        style={{ height: "auto" }}
+                        onInput={e => {
+                          const el = e.target as HTMLTextAreaElement;
+                          el.style.height = "auto";
+                          el.style.height = Math.min(el.scrollHeight, 128) + "px";
+                        }}
+                      />
+                      <button
+                        onClick={sendMessage}
+                        disabled={!input.trim() || sending}
+                        className={`rounded-lg p-2 transition-all ${
+                          input.trim()
+                            ? "bg-violet-600 hover:bg-violet-700 text-white shadow-sm"
+                            : "bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed"
+                        }`}
+                      >
+                        {sending
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <Send className="h-4 w-4" />
+                        }
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-gray-400 text-center mt-1.5">Shift+Enter for new line</p>
+                  </>
+                );
+              })()}
             </div>
           ) : (
             <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800">

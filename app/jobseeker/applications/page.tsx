@@ -25,6 +25,8 @@ import {
 import { Briefcase, Loader2, XCircle, Building, Calendar } from "lucide-react";
 import Link from "next/link";
 import ApplicationTimeline from "@/components/ApplicationTimeline";
+import BookSlotModal from "@/components/BookSlotModal";
+import SeekerApplicationDetailModal from "@/components/SeekerApplicationDetailModal";
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-800",
@@ -40,6 +42,8 @@ export default function MyApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [bookingTarget, setBookingTarget] = useState<{ id: string, title: string } | null>(null);
+  const [detailTarget, setDetailTarget] = useState<{ id: string, title: string, company: string } | null>(null);
   const dispatch = useAppDispatch();
 
   useEffect(() => {
@@ -192,19 +196,36 @@ export default function MyApplicationsPage() {
                           })}
                         </TableCell>
                         <TableCell>
-                          {app.status === "PENDING" || app.status === "REVIEWED" ? (
+                          <div className="flex flex-wrap gap-2">
                             <Button
-                              variant="ghost"
                               size="sm"
-                              onClick={() => handleWithdraw(app.id)}
-                              className="text-red-600 hover:text-red-700"
+                              variant="outline"
+                              onClick={() => setDetailTarget({ id: app.id, title: app.job_title || "Job", company: app.company_name || "Company" })}
                             >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Withdraw
+                              Details
                             </Button>
-                          ) : (
-                            <span className="text-xs text-gray-500">No actions</span>
-                          )}
+                            {app.status === "SHORTLISTED" && (
+                              <Button
+                                size="sm"
+                                onClick={() => setBookingTarget({ id: app.job_id, title: app.job_title || "this job" })}
+                                className="bg-purple-600 hover:bg-purple-700 text-white"
+                              >
+                                <Calendar className="h-4 w-4 mr-1" />
+                                Book Interview
+                              </Button>
+                            )}
+                            {(app.status === "PENDING" || app.status === "REVIEWED") && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleWithdraw(app.id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Withdraw
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -252,17 +273,36 @@ export default function MyApplicationsPage() {
                         <Calendar className="h-4 w-4" />
                         {new Date(app.applied_at).toLocaleDateString()}
                       </div>
-                      {app.status === "PENDING" || app.status === "REVIEWED" ? (
+                      <div className="flex gap-2">
                         <Button
-                          variant="ghost"
                           size="sm"
-                          onClick={() => handleWithdraw(app.id)}
-                          className="text-red-600 hover:text-red-700"
+                          variant="outline"
+                          onClick={() => setDetailTarget({ id: app.id, title: app.job_title || "Job", company: app.company_name || "Company" })}
                         >
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Withdraw
+                          Details
                         </Button>
-                      ) : null}
+                        {app.status === "SHORTLISTED" && (
+                          <Button
+                            size="sm"
+                            onClick={() => setBookingTarget({ id: app.job_id, title: app.job_title || "this job" })}
+                            className="bg-purple-600 hover:bg-purple-700 text-white"
+                          >
+                            <Calendar className="h-4 w-4 mr-1" />
+                            Book
+                          </Button>
+                        )}
+                        {(app.status === "PENDING" || app.status === "REVIEWED") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleWithdraw(app.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Withdraw
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -271,6 +311,26 @@ export default function MyApplicationsPage() {
           </Card>
         )}
       </div>
+
+      {bookingTarget && (
+        <BookSlotModal
+          jobId={bookingTarget.id}
+          jobTitle={bookingTarget.title}
+          isOpen={!!bookingTarget}
+          onClose={() => setBookingTarget(null)}
+          onSuccess={fetchApplications}
+        />
+      )}
+
+      {detailTarget && (
+        <SeekerApplicationDetailModal
+          applicationId={detailTarget.id}
+          jobTitle={detailTarget.title}
+          companyName={detailTarget.company}
+          isOpen={!!detailTarget}
+          onClose={() => setDetailTarget(null)}
+        />
+      )}
     </div>
   );
 }

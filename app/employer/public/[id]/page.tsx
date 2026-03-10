@@ -119,9 +119,15 @@ export default function EmployerPublicProfilePage() {
                   {employer.verification_tier !== "UNVERIFIED" && (
                     <Badge className="bg-green-100 text-green-800 border-0">
                       <Shield className="h-3 w-3 mr-1" />
-                      Verified
+                      {employer.trust_score >= 90 ? "Highly Trustable ⭐" : 
+                       employer.trust_score >= 70 ? "Trustable" : "Verified"}
                     </Badge>
                   )}
+                  {employer.verification_badges && employer.verification_badges.map((badge: string, index: number) => (
+                    <Badge key={index} variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                      {badge}
+                    </Badge>
+                  ))}
                   {employer.industry && (
                     <Badge variant="outline">{employer.industry}</Badge>
                   )}
@@ -175,12 +181,6 @@ export default function EmployerPublicProfilePage() {
                 <Briefcase className="h-4 w-4" />
                 {employer.total_job_posts_count} jobs posted
               </span>
-              {employer.trust_score > 0 && (
-                <span className="flex items-center gap-1">
-                  <Shield className="h-4 w-4" />
-                  Trust Score: {employer.trust_score}/100
-                </span>
-              )}
             </div>
           </CardContent>
         </Card>
