@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { AxiosError } from "axios";
+import { toast } from "react-toastify";
 import { Eye, EyeOff, Loader, Loader2 } from "lucide-react";
-import { useAppDispatch } from "@/lib/store";
-import { showAlert } from "@/lib/store/slices/notificationSlice";
 
 import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton";
 import { Button } from "@/components/ui/button";
@@ -24,7 +23,11 @@ import { Input } from "@/components/ui/input";
 
 import { axiosInstance } from "@/lib/axios/axios";
 import { loginAction } from "@/lib/cookies";
+import { useAppDispatch } from "@/lib/store";
+import { loginUser } from "@/lib/store/slices/authSlice";
+import { REDIRECT_URLS } from "@/local/redirectDatas";
 
+//  Your backend route
 const LOGIN_URL = "/auth/login";
 
 const formSchema = z.object({
@@ -38,123 +41,54 @@ type FormValues = z.infer<typeof formSchema>;
 export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [checking, setChecking] = useState(true);  // ← Add this
-  const hasCheckedAuth = useRef(false);  // ← Prevent multiple checks
 
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
+
   const router = useRouter();
   const dispatch = useAppDispatch();
-
-  // ✅ FIXED: Only redirect if user has valid token and NO redirect param
-  useEffect(() => {
-    if (hasCheckedAuth.current) return;  // ← Prevent running twice
-    hasCheckedAuth.current = true;
-
-    async function checkAuth() {
-      const token = localStorage.getItem("access_token");
-      const role = localStorage.getItem("user_role");
-      
-      // If no token, user needs to login
-      if (!token || !role) {
-        setChecking(false);
-        return;
-      }
-      
-      // ✅ If there's a redirect param, user was sent here on purpose
-      // Don't auto-redirect them away
-      if (redirectTo && redirectTo !== "/") {
-        console.log("User has redirect param, staying on login page");
-        setChecking(false);
-        return;
-      }
-      
-      try {
-        // Verify token is still valid
-        await axiosInstance.get("/auth/me");
-        
-        // Token is valid, redirect to appropriate page
-        console.log("User already logged in, redirecting...");
-        
-        if (role === "ADMIN") {
-          window.location.href = "/admin";
-        } else if (role === "EMPLOYER") {
-          window.location.href = "/employer/profile";
-        } else if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
-          window.location.href = "/jobseeker/profile";
-        } else {
-          window.location.href = "/";
-        }
-      } catch (error) {
-        // Token is invalid, clear and stay on login
-        console.log("Token invalid, clearing storage");
-        localStorage.clear();
-        sessionStorage.clear();
-        setChecking(false);
-      }
-    }
-    
-    checkAuth();
-  }, [redirectTo]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { email: "", password: "", rememberMe: false },
   });
 
+  // Store token based on rememberMe
+  const persistToken = (token: string, remember: boolean) => {
+    try {
+      const storage = remember ? localStorage : sessionStorage;
+      storage.setItem("access_token", token);
+    } catch {
+      // ignore
+    }
+  };
+
   const handleLogin = async (user: any, token: string, remember: boolean) => {
-    const role = user?.role;
+    const roleWeight = user?.role || "base";
 
-    // Store in localStorage
-    localStorage.setItem("access_token", token);
-    localStorage.setItem("user_id", user.id);
-    localStorage.setItem("user_email", user.email);
-    localStorage.setItem("user_role", role);
+    dispatch(loginUser({ user, token, roleWeight }));
 
-    // Set server-side cookies
-    await loginAction(user.id, user.email, token, null, role);
+    await loginAction(user.id, user.email, token, null, roleWeight);
 
-    // Handle redirects
-    if (redirectTo && redirectTo !== "/" && redirectTo !== "null") {
-      return window.location.href = redirectTo;
-    }
+    //redirecting
 
-    // Route based on role
-    if (role === "EMPLOYER") {
-      try {
-        const profileRes = await axiosInstance.get("/employer/profile/me");
-        
-        if (!profileRes.data.profile_completed) {
-          return window.location.href = "/employer/register/complete";
-        } else {
-          return window.location.href = "/employer/profile";
-        }
-      } catch (err) {
-        return window.location.href = "/employer/register/complete";
-      }
-    }
+    persistToken(token, remember);
 
-    if (role === "JOBSEEKER" || role === "JOB_SEEKER") {
-      try {
-        const profileRes = await axiosInstance.get("/jobseeker/profile");
-        
-        if (!profileRes.data.profile_completed) {
-          return window.location.href = "/cv-upload";
-        } else {
-          return window.location.href = "/jobseeker/profile";
-        }
-      } catch (err) {
-        return window.location.href = "/jobseeker/profile";
-      }
-    }
+    const target =
+      redirectTo && redirectTo !== "/"
+        ? redirectTo
+        : roleWeight === "hiring"
+          ? "/profile"
+          : "/jobseeker/profile";
 
-    return window.location.href = "/";
+    router.push(target);
   };
 
   const handelContinue = async (data: FormValues) => {
     setLoading(true);
 
     try {
+      //  OAuth2PasswordRequestForm expects urlencoded username/password
       const body = new URLSearchParams();
       body.append("username", data.email);
       body.append("password", data.password);
@@ -164,23 +98,17 @@ export default function LoginForm() {
       });
 
       const token = loginRes?.data?.access_token;
-
       if (!token) {
-        dispatch(showAlert({
-          title: "Login Failed",
-          message: "Missing access token from server.",
-          type: "error"
-        }));
+        toast.error("Login failed: missing access token from server.");
         return;
       }
 
-      // Fetch user profile
+      //  Fetch user profile
       const meRes = await axiosInstance.get("/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       await handleLogin(meRes.data, token, !!data.rememberMe);
-
     } catch (err: any) {
       const axErr = err as AxiosError<any>;
       const detail =
@@ -188,33 +116,22 @@ export default function LoginForm() {
         axErr?.response?.data?.message ||
         "An error occurred while logging in.";
 
+      // Optional routing based on message
       if (typeof detail === "string") {
         const d = detail.toLowerCase();
+
         if (d.includes("verify your email")) {
           router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
-        } else if (d.includes("upload") || d.includes("cv")) {
-          router.push("/signup");
+        } else if (d.includes("upload") && d.includes("cv")) {
+          router.push("/signup"); // or your “upload-cv” step page
         }
       }
 
-      dispatch(showAlert({
-        title: "Login Error",
-        message: detail,
-        type: "error"
-      }));
+      toast.error(detail);
     } finally {
       setLoading(false);
     }
   };
-
-  // ✅ Show loading while checking auth
-  if (checking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-      </div>
-    );
-  }
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center bg-white px-4">
@@ -232,7 +149,10 @@ export default function LoginForm() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handelContinue)} className="space-y-3">
+          <form
+            onSubmit={form.handleSubmit(handelContinue)}
+            className="space-y-3"
+          >
             <FormField
               control={form.control}
               name="email"

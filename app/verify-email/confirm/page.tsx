@@ -3,16 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { axiosInstance } from "@/lib/axios/axios";
-import { useAppDispatch } from "@/lib/store";
-import { showAlert } from "@/lib/store/slices/notificationSlice";
+import { toast } from "react-toastify";
 
 export default function VerifyEmailConfirmPage() {
   const params = useSearchParams();
   const router = useRouter();
-  const dispatch = useAppDispatch();
 
   const token = params.get("token");
-  const emailFromQuery = params.get("email");
+  const emailFromQuery = params.get("email"); // optional but helps resend UX
 
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Verifying your email...");
@@ -32,58 +30,31 @@ export default function VerifyEmailConfirmPage() {
       }
 
       try {
-        // ✅ Verify email (works for both job seekers and employers)
-        const res = await axiosInstance.post("/auth/verify-email/confirm", { 
-          token: token 
-        });
+        const res = await axiosInstance.post("/auth/verify-email/confirm", { token });
 
         if (cancelled) return;
 
+        // backend returns: { message, email, cv_upload_token }
         const verifiedEmail = res.data?.email ?? emailFromQuery ?? null;
         setEmail(verifiedEmail);
 
-        const role = res.data?.role;
-        const accessToken = res.data?.access_token;
         const cvUploadToken = res.data?.cv_upload_token;
-        const nextStep = res.data?.next_step;
+        if (!cvUploadToken) {
+          // This means backend isn't returning it or you're hitting old backend
+          setStatus("error");
+          setMessage("Verification succeeded, but CV upload authorization token is missing. Please resend verification email.");
+          return;
+        }
+
+        // ✅ STORE TOKEN for /cv-upload
+        localStorage.setItem("cv_upload_token", cvUploadToken);
 
         setStatus("success");
-        setMessage(res.data?.message || "Email verified successfully!");
+        setMessage(res.data?.message || "You are verified. Redirecting to CV upload...");
 
-        // ✅ Store access token
-        if (accessToken) {
-          localStorage.setItem("access_token", accessToken);
-          localStorage.setItem("user_email", verifiedEmail);
-          localStorage.setItem("user_role", role);
-        }
-
-        // ✅ Role-based redirect
-        if (role === "EMPLOYER") {
-          dispatch(showAlert({
-            title: "Email Verified",
-            message: "Please complete your profile.",
-            type: "success"
-          }));
-          window.setTimeout(() => {
-            router.replace("/employer/register/complete");
-          }, 1500);
-        } else if (role === "JOB_SEEKER" || role === "JOBSEEKER") {
-          if (cvUploadToken) {
-            localStorage.setItem("cv_upload_token", cvUploadToken);
-          }
-          dispatch(showAlert({
-            title: "Email Verified",
-            message: "Please upload your CV.",
-            type: "success"
-          }));
-          window.setTimeout(() => {
-            router.replace("/cv-upload");
-          }, 1500);
-        } else {
-          // Admin or other roles
-          router.replace("/dashboard");
-        }
-
+        window.setTimeout(() => {
+          router.replace("/cv-upload");
+        }, 1200);
       } catch (err: any) {
         if (cancelled) return;
 
@@ -104,30 +75,20 @@ export default function VerifyEmailConfirmPage() {
 
   const resendVerification = async () => {
     if (!email) {
-      dispatch(showAlert({
-        title: "Missing Email",
-        message: "Missing email address. Please go back and try again.",
-        type: "error"
-      }));
+      toast.error("Missing email address. Please go back to the verify-email page and resend using your email.");
       return;
     }
 
     setResending(true);
     try {
-      const res = await axiosInstance.post("/auth/verify-email/request", { 
-        email: email 
-      });
-      dispatch(showAlert({
-        title: "Success",
-        message: res.data?.message || "Verification email sent again.",
-        type: "success"
-      }));
+      const res = await axiosInstance.post("/auth/verify-email/request", { email });
+      toast.success(res.data?.message || "Verification email sent again.");
     } catch (err: any) {
-      dispatch(showAlert({
-        title: "Error",
-        message: err?.response?.data?.detail || err?.response?.data?.message || "Failed to resend verification email.",
-        type: "error"
-      }));
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.response?.data?.message ||
+          "Failed to resend verification email."
+      );
     } finally {
       setResending(false);
     }
@@ -147,7 +108,7 @@ export default function VerifyEmailConfirmPage() {
         <p className="text-sm text-muted-foreground">{message}</p>
 
         {status === "success" && (
-          <p className="text-xs text-muted-foreground">Redirecting...</p>
+          <p className="text-xs text-muted-foreground">Redirecting to CV upload...</p>
         )}
 
         {status === "error" && (
@@ -155,16 +116,18 @@ export default function VerifyEmailConfirmPage() {
             <button
               onClick={resendVerification}
               disabled={!canResend || resending}
-              className="w-full bg-purple-600 text-white py-2 rounded-md disabled:opacity-50 hover:bg-purple-700"
+              className="w-full bg-primary text-primary-foreground py-2 rounded-md disabled:opacity-50"
             >
               {resending ? "Sending..." : "Resend verification email"}
             </button>
 
             <button
-              onClick={() => router.push("/login")}
-              className="w-full border py-2 rounded-md hover:bg-gray-100"
+              onClick={() =>
+                router.push(email ? `/verify-email?email=${encodeURIComponent(email)}` : "/verify-email")
+              }
+              className="w-full border py-2 rounded-md"
             >
-              Go to Login
+              Back to verify page
             </button>
           </div>
         )}

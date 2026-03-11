@@ -20,6 +20,7 @@ export default function RootLayout({
   return (
     <html className="h-screen w-screen scrollbar-hide" lang="en" suppressHydrationWarning>
       <body className="antialiased bg-background text-foreground">
+        <ToastProvider>
           <StoreProvider>
             <ThemeProvider
               attribute="class"

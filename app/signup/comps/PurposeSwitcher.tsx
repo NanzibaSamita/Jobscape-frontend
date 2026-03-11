@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader } from "lucide-react";
 import { axiosInstance } from "@/lib/axios/axios";
 import { useRouter } from "next/navigation";
+
 import UserInfoForm from "./UserInfoForm";
 import { Inputs } from "./Inputs";
 
@@ -13,7 +14,9 @@ const SECTOR_API_ENDPOINT = "/api/v1/sector-select";
 export default function PurposeSwitcher() {
   const router = useRouter();
 
-  const [userType, setUserType] = useState<"job-seeker" | "hiring">("job-seeker");
+  const [userType, setUserType] = useState<"job-seeker" | "hiring">(
+    "job-seeker",
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   const [countries, setCountries] = useState<any[]>([]);
@@ -40,17 +43,14 @@ export default function PurposeSwitcher() {
   }, [userType]);
 
   const heading =
-    userType === "job-seeker" ? "Create a new account" : "Welcome! Let's get started";
+    userType === "job-seeker"
+      ? "Create a new account"
+      : "Welcome! Let’s get started";
 
   const subText =
     userType === "job-seeker"
-      ? "Create your account. We'll send a verification link to your email. After verifying, you'll upload your CV."
+      ? "Create your account. We’ll send a verification link to your email. After verifying, you’ll upload your CV."
       : "To create your free account, we just need a few details.";
-
-  const handleSignInClick = () => {
-    console.log("🔵🔵🔵 SIGN IN CLICKED");
-    router.push("/login");
-  };
 
   return (
     <>
@@ -95,22 +95,32 @@ export default function PurposeSwitcher() {
           </div>
 
           {/* CONTENT */}
-          <UserInfoForm
-            recruiter={userType === "hiring"}
-            email=""
-            editableEmail
-            onComplete={() => {}}
-          />
-          {/* SIGN IN LINK - SIMPLIFIED */}
-          <div className="text-sm text-center">
+          {userType === "job-seeker" ? (
+            <UserInfoForm
+              recruiter={false}
+              email=""
+              editableEmail
+              // job-seeker flow: UserInfoForm will route to /verify-email?email=...
+              onComplete={() => {}}
+            />
+          ) : (
+            <Inputs
+              isLoading={isLoading}
+              setIsLoading={setIsLoading}
+              countries={countries}
+              sectors={sectors}
+            />
+          )}
+
+          <p className="text-sm text-center">
             Already have an account?{" "}
-            <button
-              onClick={handleSignInClick}
-              className="text-purple-600 cursor-pointer hover:underline font-medium"
+            <span
+              className="text-purple-600 cursor-pointer"
+              onClick={() => router.push("/login")}
             >
               Sign in
-            </button>
-          </div>
+            </span>
+          </p>
         </div>
       </div>
     </>

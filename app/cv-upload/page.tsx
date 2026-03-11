@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAppDispatch } from "@/lib/store";
-import { showAlert } from "@/lib/store/slices/notificationSlice";
+import { toast } from "react-toastify";
 import UploadFile from "@/app/signup/comps/UploadFile";
 import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton";
 import { uploadResume } from "@/lib/api/resume"; // your existing function
@@ -12,34 +11,24 @@ export default function CvUploadPage() {
   const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const dispatch = useAppDispatch();
 
   async function submitCv() {
-    if (!selectedFile) {
-      dispatch(showAlert({
-        title: "Upload Required",
-        message: "Please upload your CV first.",
-        type: "error"
-      }));
-      return;
-    }
+    if (!selectedFile) return toast.error("Please upload your CV first.");
 
     setLoading(true);
     try {
       // IMPORTANT: uploadResume must NOT require temp token now
       const res = await uploadResume(selectedFile);
-      dispatch(showAlert({
-        title: "Success",
-        message: res?.message || "CV uploaded & parsed successfully.",
-        type: "success"
-      }));
+
+      toast.success(res?.message || "CV uploaded & parsed successfully.");
       router.push("/login");
     } catch (err: any) {
-      dispatch(showAlert({
-        title: "Upload Error",
-        message: err?.response?.data?.detail || err?.response?.data?.message || err?.message || "Failed to upload CV.",
-        type: "error"
-      }));
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to upload CV."
+      );
     } finally {
       setLoading(false);
     }

@@ -1,11 +1,8 @@
 "use client";
+import { useState } from "react";
+import { Menu } from "lucide-react";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // ✅ MUST IMPORT THIS
-import { getUserProfile, JobSeekerProfile } from "@/lib/api/profile";
-import { useAppDispatch } from "@/lib/store";
-import { showAlert } from "@/lib/store/slices/notificationSlice";
-
+import { jobSeeker } from "./data";
 import Header from "./Header";
 import Skills from "./Skills";
 import Experience from "./Experience";
@@ -19,139 +16,74 @@ import Publications from "./Publications";
 import Links from "./Links";
 
 export default function Page() {
-  const [profile, setProfile] = useState<JobSeekerProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const dispatch = useAppDispatch();
-  const router = useRouter(); // ✅ MUST ADD THIS
-
-  useEffect(() => {
-    async function fetchProfile() {
-      // ✅ MUST HAVE THIS CHECK - Without it, you'll get the loop error
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        console.log("❌ No token found, redirecting to login");
-        router.push("/login");
-        return;
-      }
-
-      try {
-        console.log("🔵 Fetching profile...");
-        const data = await getUserProfile();
-        console.log("🔵 Profile data:", data);
-        setProfile(data.profile);
-      } catch (error: any) {
-        console.error("❌ Failed to fetch profile:", error);
-        
-        // ✅ MUST HAVE THIS - Redirect on 401 error
-        if (error?.response?.status === 401) {
-          console.log("❌ Unauthorized, redirecting to login");
-          localStorage.clear();
-          router.push("/login");
-          return;
-        }
-        
-        dispatch(showAlert({
-          title: "Profile Error",
-          message: error?.response?.data?.detail || "Failed to load profile",
-          type: "error"
-        }));
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchProfile();
-  }, [router]); // ✅ ADD router to dependencies
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-500">Loading profile...</p>
-      </div>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-2">
-          <p className="text-red-500">Profile not found</p>
-          <p className="text-sm text-gray-500">
-            Please complete your profile setup
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
-      <div className="max-w-4xl mx-auto space-y-4">
-        {/* Header with name and location */}
-        <Header
-          name={profile.full_name}
-          location={profile.location ?? undefined}
-          profilePictureUrl={profile.profile_picture_url}
-          profileData={{
-            profile_picture_url: profile.profile_picture_url,
-            professional_summary: profile.professional_summary ?? undefined,
-            skills: profile.skills,
-            experience: profile.experience,
-            education: profile.education,
-            linkedin_url: profile.linkedin_url ?? undefined,
-            phone: (profile as any).phone ?? undefined,
-            projects: profile.projects,
-            certifications: profile.certifications,
-            is_employed: profile.is_employed,
-            current_employer_name: profile.current_employer_name,
-          }}
-        />
-
-        {/* Profile sections */}
-        <div className="bg-white rounded-xl p-6 space-y-6">
-          {/* Professional Summary */}
-          {profile.professional_summary && (
-            <div>
-              <h2 className="text-lg font-semibold mb-3">About</h2>
-              <p className="text-sm text-gray-600">
-                {profile.professional_summary}
-              </p>
+    <div className="min-h-screen bg-gray-100">
+      {/* TOP NAVBAR (outside the profile card) */}
+      <div className="sticky top-0 z-30 bg-gray-100">
+        <div className="max-w-5xl mx-auto px-6 pt-6">
+          <div className="bg-white rounded-2xl border border-purple-100 shadow-sm px-5 py-4 flex items-center justify-between">
+            {/* Left: Logo */}
+            <div className="flex items-center gap-2">
+              <img src="/images/logoBlack.png" alt="Logo" className="h-8 w-auto" />
             </div>
-          )}
 
-          {/* Skills */}
-          <Skills data={profile.skills || []} />
+            {/* Right: Hamburger */}
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded-xl bg-purple-100 hover:bg-purple-200 transition"
+              aria-label="Open sidebar"
+            >
+              <Menu size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
 
-          {/* Experience */}
-          <Experience data={profile.experience || []} />
+      {/* Sidebar / Drawer */}
+      {sidebarOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div className="fixed top-0 right-0 h-full w-72 bg-white border-l shadow-lg p-6 z-50">
+            <h3 className="text-xl font-bold mb-4">Sidebar</h3>
+            <p className="text-gray-600">Put navigation here later.</p>
+            <button
+              className="mt-6 bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700"
+              onClick={() => setSidebarOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+        </>
+      )}
 
-          {/* Education */}
-          <Education data={profile.education || []} />
+      {/* MAIN CONTENT */}
+      <div className="max-w-5xl mx-auto px-6 pb-10">
+        {/* Profile CARD (inside light purple background) */}
+        <div className="mt-6 bg-white rounded-2xl shadow-sm border border-purple-100 p-6 space-y-8">
+          {/* Profile header row (inside card) */}
+          <Header name={jobSeeker.full_name} location={jobSeeker.location} />
 
-          {/* Projects */}
-          <Projects data={profile.projects || []} />
-
-          {/* Certifications */}
-          <Certifications data={profile.certifications || []} />
-
-          {/* Awards */}
-          <Awards data={profile.awards || []} />
-
-          {/* Languages */}
-          <Languages data={profile.languages || []} />
-
-          {/* Volunteer */}
-          <Volunteer data={profile.volunteer_experience || []} />
-
-          {/* Publications */}
-          <Publications data={profile.publications || []} />
-
-          {/* Links */}
+          {/* Sections inside same card */}
+          <Skills data={jobSeeker.skills} />
+          <Experience data={jobSeeker.experience} />
+          <Education data={jobSeeker.education} />
+          <Projects data={jobSeeker.projects} />
+          <Certifications data={jobSeeker.certifications} />
+          <Awards data={jobSeeker.awards} />
+          <Languages data={jobSeeker.languages} />
+          <Volunteer data={jobSeeker.volunteer_experience} />
+          <Publications data={jobSeeker.publications} />
           <Links
-            linkedin={profile.linkedin_url}
-            github={profile.github_url}
-            portfolio={profile.portfolio_url}
-            other_links={profile.other_links || []}
+            linkedin={jobSeeker.linkedin_url}
+            github={jobSeeker.github_url}
+            portfolio={jobSeeker.portfolio_url}
+            other_links={jobSeeker.other_links}
           />
         </div>
       </div>
