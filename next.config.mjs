@@ -28,7 +28,9 @@ const nextConfig = {
         return config
     },
     images: {
-        domains: ["wantedai.bondstein.net"], // <-- domain only, no protocol
+        domains: [
+            "res.cloudinary.com" 
+        ],
     },
 };
 

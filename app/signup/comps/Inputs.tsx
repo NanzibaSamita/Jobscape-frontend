@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/select";
 import { countryCodes } from "@/local/countries";
 import BlackStyleButton from "@/components/custom-UI/Buttons/BlackStyleButton";
-import { toast } from "react-toastify";
+import { useAppDispatch } from "@/lib/store";
+import { showAlert } from "@/lib/store/slices/notificationSlice";
 import { useRouter } from "next/navigation";
 
 // ✅ FastAPI auth endpoints (router prefix="/auth")
@@ -88,6 +89,7 @@ export function Inputs({
   setIsLoading: (loading: boolean) => void;
 }) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -118,13 +120,17 @@ export function Inputs({
     setResendLoading(true);
     try {
       await axiosInstance.post(REQUEST_VERIFY_EMAIL_URL, { email });
-      toast.success("Verification email sent. Please check your inbox.");
+      dispatch(showAlert({
+        title: "Email Sent",
+        message: "Verification email sent. Please check your inbox.",
+        type: "success"
+      }));
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.detail ||
-          err?.response?.data?.message ||
-          "Failed to send verification email."
-      );
+      dispatch(showAlert({
+        title: "Error",
+        message: err?.response?.data?.detail || err?.response?.data?.message || "Failed to send verification email.",
+        type: "error"
+      }));
     } finally {
       setResendLoading(false);
     }
@@ -156,7 +162,11 @@ export function Inputs({
 
       setSentToEmail(data.email);
       setVerificationSent(true);
-      toast.success("Account created. Please verify your email.");
+      dispatch(showAlert({
+        title: "Account Created",
+        message: "Account created. Please verify your email.",
+        type: "success"
+      }));
     } catch (err: any) {
       const status = err?.response?.status;
       const detail =
@@ -168,7 +178,11 @@ export function Inputs({
       if (status === 400) {
         form.setError("email", { type: "manual", message: detail });
       } else {
-        toast.error(detail);
+        dispatch(showAlert({
+          title: "Signup Error",
+          message: detail,
+          type: "error"
+        }));
       }
     } finally {
       setIsLoading(false);

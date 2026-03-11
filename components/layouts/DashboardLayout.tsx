@@ -14,6 +14,8 @@ import { AnimatePresence, motion } from "framer-motion"
 import { shallowEqual } from "react-redux"
 import { UserDropBar } from "../shared/UserDropBar"
 import NextImage from "../custom-UI/NextImage"
+import { NotificationTray } from "../notifications/NotificationTray"
+import { AppAlertContainer } from "../notifications/AppAlert"
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
     const dispatch = useAppDispatch()
@@ -25,6 +27,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     const [highlightPath, setHighLightPath] = useState("");
     const { isLoading, } = useUI();
     const [menuItems, setMenuItems] = useState(SidebarData);
+    const [isNotificationOpen, setIsNotificationOpen] = useState(false)
+    const [unreadCount, setUnreadCount] = useState(0)
     const [, setIsHovered] = useState({
         state: false,
         position: { top: 0, left: 0 },
@@ -225,7 +229,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                             </nav>
                             <div>
                                 <p className="text-xs text-gray-500 mt-4">
-                                    © {new Date().getFullYear()} WANTED.AI. All rights reserved.
+                                    © {new Date().getFullYear()} JobScape. All rights reserved.
                                 </p>
                             </div>
                         </div>
@@ -240,10 +244,26 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                                 <div className="ml-auto flex items-center space-x-4">
                                     {isAuthenticated ? (
                                         <div className="flex items-center space-x-2">
-                                            <Button className="border rounded-full relative" variant="ghost" size="icon">
-                                                <section className="w-[6px] h-[6px] rounded-full bg-orange-600 absolute top-[2px] right-[2px] hidden" />
-                                                <Bell className="h-4 w-4" />
-                                            </Button>
+                                            <div className="relative">
+                                                <Button 
+                                                    className="border rounded-full relative" 
+                                                    variant="ghost" 
+                                                    size="icon"
+                                                    onClick={() => setIsNotificationOpen(!isNotificationOpen)}
+                                                >
+                                                    {unreadCount > 0 && (
+                                                        <section className="w-[18px] h-[18px] rounded-full bg-red-600 absolute -top-1 -right-1 flex items-center justify-center border-2 border-white">
+                                                            <span className="text-[10px] text-white font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>
+                                                        </section>
+                                                    )}
+                                                    <Bell className="h-4 w-4" />
+                                                </Button>
+                                                <NotificationTray 
+                                                    isOpen={isNotificationOpen} 
+                                                    onClose={() => setIsNotificationOpen(false)}
+                                                    onUnreadCountChange={setUnreadCount}
+                                                />
+                                            </div>
                                             <UserDropBar
                                                 userName={
                                                     <div className="flex justify-center items-center gap-2 select-none cursor-pointer">
@@ -270,6 +290,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                     </main>
                 </div>
             </div>
+            <AppAlertContainer />
         </div>
     )
 }

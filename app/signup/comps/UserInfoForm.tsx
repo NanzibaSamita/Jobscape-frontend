@@ -75,6 +75,7 @@ export default function UserInfoForm({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   const form = useForm<UserInfoValues>({
     resolver: zodResolver(userInfoSchema),
@@ -132,7 +133,11 @@ export default function UserInfoForm({
           });
         }
       } else {
-        toast.error(detail);
+        dispatch(showAlert({
+          title: "Registration Error",
+          message: detail,
+          type: "error"
+        }));
       }
     } finally {
       setIsLoading(false);
