@@ -44,6 +44,7 @@ export default function BookSlotModal({
   const [slots, setSlots] = useState<PoolSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<string>("");
   const [isBooking, setIsBooking] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
 
@@ -51,6 +52,8 @@ export default function BookSlotModal({
 
   useEffect(() => {
     if (isOpen && jobId) {
+      setSelectedSlotId(null);
+      setSelectedStyle("");
       loadAvailableSlots();
     }
   }, [isOpen, jobId]);
@@ -61,8 +64,14 @@ export default function BookSlotModal({
       const data = await getSlotPool(jobId);
       // Ensure data is an array and filter out booked slots
       if (data && Array.isArray(data.slots)) {
-        setSlots(data.slots.filter((slot) => !slot.is_booked));
+        const available = data.slots.filter((slot) => !slot.is_booked);
+        setSlots(available);
         setHasRequested(data.has_requested_extra_slots);
+        
+        // Auto-select if only one slot
+        if (available.length === 1) {
+          setSelectedSlotId(available[0].id);
+        }
       } else {
         setSlots([]); 
       }
@@ -84,7 +93,17 @@ export default function BookSlotModal({
 
     try {
       setIsBooking(true);
-      await bookInterviewSlot(selectedSlotId);
+      // Find selected slot to check if style choice is needed
+      const slot = slots.find(s => s.id === selectedSlotId);
+      const needsStyle = slot?.allow_seeker_style_choice && !slot?.style;
+      
+      if (needsStyle && !selectedStyle) {
+        dispatch(showAlert({ title: "Style Required", message: "Please select an interview format.", type: "warning" }));
+        setIsBooking(false);
+        return;
+      }
+
+      await bookInterviewSlot(selectedSlotId, needsStyle ? selectedStyle : undefined);
       dispatch(
         showAlert({
           title: "Success",
@@ -184,7 +203,10 @@ export default function BookSlotModal({
               {slots.map((slot) => (
                 <button
                   key={slot.id}
-                  onClick={() => setSelectedSlotId(slot.id)}
+                  onClick={() => {
+                    setSelectedSlotId(slot.id);
+                    setSelectedStyle(""); // Reset style choice when slot changes
+                  }}
                   className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left ${
                     selectedSlotId === slot.id
                       ? "border-violet-600 bg-violet-50 dark:bg-violet-900/20"
@@ -195,7 +217,7 @@ export default function BookSlotModal({
                     <div className={`p-2 rounded-lg ${selectedSlotId === slot.id ? "bg-violet-600 text-white" : "bg-gray-100 dark:bg-zinc-800 text-gray-500"}`}>
                       <Clock className="h-5 w-5" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <div className="font-semibold text-sm">
                         {new Date(slot.datetime_utc).toLocaleString([], {
                           weekday: "short",
@@ -206,12 +228,42 @@ export default function BookSlotModal({
                         })}
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">
-                        {INTERVIEW_STYLE_LABELS[slot.style as InterviewStyle] || "Interview"} &bull; {slot.duration_minutes}m
+                        {slot.style ? INTERVIEW_STYLE_LABELS[slot.style as InterviewStyle] : "Seeker Chooses Format"} &bull; {slot.duration_minutes}m
                       </div>
+
+                      {/* Style Picker */}
+                      {selectedSlotId === slot.id && slot.allow_seeker_style_choice && !slot.style && (
+                        <div className="mt-3 pt-3 border-t border-violet-200 dark:border-violet-700">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                            Select Format:
+                          </p>
+                          {slot.available_styles && slot.available_styles.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {slot.available_styles.map(s => (
+                                <button
+                                  key={s}
+                                  onClick={(e) => { e.stopPropagation(); setSelectedStyle(s); }}
+                                  className={`px-2 py-1 rounded-md border text-[10px] font-medium transition-all ${
+                                    selectedStyle === s
+                                      ? "bg-violet-600 border-violet-600 text-white shadow-sm"
+                                      : "bg-white dark:bg-zinc-800 border-gray-200 dark:border-gray-700 text-gray-600 hover:border-violet-300"
+                                  }`}
+                                >
+                                  {INTERVIEW_STYLE_LABELS[s as InterviewStyle] || s}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] italic text-amber-500">
+                              No formats specified by employer. Please contact support.
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {selectedSlotId === slot.id && (
-                    <CheckCircle2 className="h-5 w-5 text-violet-600" />
+                    <CheckCircle2 className="h-5 w-5 text-violet-600 self-start" />
                   )}
                 </button>
               ))}

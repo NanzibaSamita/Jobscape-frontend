@@ -69,6 +69,7 @@ export default function JobDetailPage() {
 
   // ✅ NEW: State for user's location
   const [userLocation, setUserLocation] = useState<string | undefined>(undefined);
+  const [isEmployedHere, setIsEmployedHere] = useState<boolean>(false);
 
   // Application form state
   const [resumes, setResumes] = useState<Resume[]>([]);
@@ -89,7 +90,7 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     fetchJobDetails();
-    fetchUserLocation();
+    fetchUserProfile();
   }, [jobId]);
 
   async function fetchJobDetails() {
@@ -127,8 +128,8 @@ export default function JobDetailPage() {
     }
   }
 
-  // ✅ NEW: Fetch the job seeker's location from their profile
-  async function fetchUserLocation() {
+  // ✅ NEW: Fetch the job seeker's profile to get location and employment status
+  async function fetchUserProfile() {
     try {
       const token = localStorage.getItem("access_token");
 
@@ -142,8 +143,13 @@ export default function JobDetailPage() {
 
       const data = await res.json();
 
-      if (data.role === "jobseeker" && data.profile?.location) {
-        setUserLocation(data.profile.location);
+      if (data.role === "jobseeker" && data.profile) {
+        if (data.profile.location) {
+          setUserLocation(data.profile.location);
+        }
+        if (data.profile.is_employed && data.profile.current_job_id === jobId) {
+          setIsEmployedHere(true);
+        }
       }
     } catch {
       // silent fail
@@ -356,13 +362,24 @@ export default function JobDetailPage() {
                   {job.company_name || "Company Name"}
                 </div>
               </div>
-              <Button
-                onClick={openApplyModal}
-                size="lg"
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                Apply Now
-              </Button>
+              {isEmployedHere ? (
+                <Button
+                  disabled
+                  size="lg"
+                  className="bg-green-600 hover:bg-green-700 opacity-100 cursor-not-allowed"
+                >
+                  <Briefcase className="h-4 w-4 mr-2" />
+                  Employed Here
+                </Button>
+              ) : (
+                <Button
+                  onClick={openApplyModal}
+                  size="lg"
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  Apply Now
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>

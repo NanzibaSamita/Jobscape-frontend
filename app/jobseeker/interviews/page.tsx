@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Calendar, Clock, MapPin, Video, Phone, Users, Award, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
 import { useAppDispatch } from "@/lib/store";
 import { showAlert } from "@/lib/store/slices/notificationSlice";
+import { Badge } from "@/components/ui/badge";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -24,6 +25,7 @@ interface InterviewSchedule {
   meeting_link: string | null;
   instructions: string | null;
   notes_for_candidate: string | null;
+  is_completed?: boolean;
 }
 
 const STYLE_ICONS: Record<string, React.ElementType> = {
@@ -69,7 +71,17 @@ export default function InterviewsPage() {
     try {
       const res = await fetch(`${API_BASE}/interviews/my-interviews`, { credentials: "include" });
       if (!res.ok) throw new Error();
-      setInterviews(await res.json());
+      const data: InterviewSchedule[] = await res.json();
+      setInterviews(data);
+      
+      // Auto-select if only one slot for each interview
+      const newSelectedSlots = { ...selectedSlots };
+      data.forEach(iv => {
+        if (!iv.is_confirmed && iv.proposed_slots.length === 1 && newSelectedSlots[iv.schedule_id] === undefined) {
+          newSelectedSlots[iv.schedule_id] = 0;
+        }
+      });
+      setSelectedSlots(newSelectedSlots);
     } catch {
       dispatch(showAlert({
         title: "Load Error",
@@ -213,7 +225,7 @@ export default function InterviewsPage() {
                       </p>
                     </div>
 
-                    {iv.style === "video_call" && (
+                    {iv.style === "video_call" && !iv.is_completed && (
                       <button
                         onClick={() => {
                           const internalPath = iv.meeting_link?.startsWith('/') ? iv.meeting_link : `/interview/${iv.schedule_id}`;
@@ -224,6 +236,12 @@ export default function InterviewsPage() {
                         <Video className="h-4 w-4" />
                         Join Video Room
                       </button>
+                    )}
+                    {iv.is_completed && (
+                      <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 py-2 px-4">
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Interview Completed
+                      </Badge>
                     )}
                   </div>
                 )}
@@ -274,26 +292,32 @@ export default function InterviewsPage() {
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Choose your preferred interview format:
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {iv.available_styles.map(s => {
-                        const Icon = STYLE_ICONS[s] || Calendar;
-                        const selected = selectedStyles[iv.schedule_id] === s;
-                        return (
-                          <button
-                            key={s}
-                            onClick={() => setSelectedStyles(prev => ({ ...prev, [iv.schedule_id]: s }))}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all
-                              ${selected
-                                ? "border-violet-500 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
-                                : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
-                              }`}
-                          >
-                            <Icon className="h-3.5 w-3.5" />
-                            {STYLE_LABELS[s] || s}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {iv.available_styles && iv.available_styles.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {iv.available_styles.map(s => {
+                          const Icon = STYLE_ICONS[s] || Calendar;
+                          const selected = selectedStyles[iv.schedule_id] === s;
+                          return (
+                            <button
+                              key={s}
+                              onClick={() => setSelectedStyles(prev => ({ ...prev, [iv.schedule_id]: s }))}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all
+                                ${selected
+                                  ? "border-violet-500 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 shadow-sm"
+                                  : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                                }`}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              {STYLE_LABELS[s] || s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs italic text-amber-500">
+                        No formats specified by employer. Please contact support.
+                      </p>
+                    )}
                   </div>
                 )}
 

@@ -6,6 +6,7 @@ export type ApplicationStatus =
   | "SHORTLISTED"
   | "INTERVIEW_SCHEDULED"
   | "ACCEPTED"
+  | "HIRED"
   | "REJECTED"
   | "WITHDRAWN";
 
@@ -35,6 +36,7 @@ export interface Application {
   booked_slot_style?: string | null;
   booked_slot_meeting_link?: string | null;
   interview_schedule_id?: string | null;
+  interview_is_completed?: boolean;
 }
 
 export interface ApplicationDetail extends Application {
@@ -51,6 +53,8 @@ export interface ApplicationDetail extends Application {
   booked_slot_location: string | null;
   booked_slot_style: string | null;
   booked_slot_meeting_link: string | null;
+  interview_is_completed: boolean;
+  interview_instructions: string | null;
 }
 
 export interface CreateApplicationData {

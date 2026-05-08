@@ -75,8 +75,9 @@ export default function SeekerInterviewSlotsPage() {
     try {
       const res = await fetch(`${API_BASE}/interviews/pool/${jobId}`, { credentials: "include" });
       if (!res.ok) throw new Error();
-      const data: AvailableSlot[] = await res.json();
-      setSlots(data.filter(s => !s.is_booked));
+      const data = await res.json();
+      const availableSlots = Array.isArray(data.slots) ? data.slots : [];
+      setSlots(availableSlots.filter((s: AvailableSlot) => !s.is_booked));
     } catch {
       dispatch(showAlert({ title: "Error", message: "Failed to load interview slots.", type: "error" }));
     } finally {

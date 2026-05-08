@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Bell, Briefcase, Calendar, InboxIcon, LogOut, User } from "lucide-react";
 import { useAppDispatch } from "@/lib/store";
 import { showAlert } from "@/lib/store/slices/notificationSlice";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NotificationTray } from "@/components/notifications/NotificationTray";
+import JobSeekerLayout from "@/app/jobseeker/layout";
+import { useAppSelector } from "@/lib/store";
 
 export default function EmployerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -15,6 +17,54 @@ export default function EmployerLayout({ children }: { children: React.ReactNode
   const dispatch = useAppDispatch();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const roleWeight = useAppSelector((state) => state.auth.roleWeight);
+
+  useEffect(() => {
+    // 1. Prioritize Redux roleWeight (95 = Employer, 90 = Job Seeker)
+    if (roleWeight?.toString() === "95") {
+      setUserRole("EMPLOYER");
+      setReady(true);
+      return;
+    } else if (roleWeight?.toString() === "90") {
+      setUserRole("JOB_SEEKER");
+      setReady(true);
+      return;
+    }
+
+    // 2. Fallback to localStorage
+    let storedRole = localStorage.getItem("user_role");
+    
+    if (!storedRole) {
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        try {
+          const userObj = JSON.parse(userStr);
+          storedRole = userObj?.role || (userObj?.roles && userObj.roles.length > 0 ? userObj.roles[0]?.name : null);
+        } catch (e) {}
+      }
+    }
+    
+    if (storedRole) {
+      storedRole = storedRole.toUpperCase().replace('_', '');
+      if (storedRole === "JOBSEEKER") {
+        setUserRole("JOB_SEEKER");
+      } else if (storedRole === "EMPLOYER") {
+        setUserRole("EMPLOYER");
+      }
+    }
+
+    setReady(true);
+  }, [roleWeight]);
+
+  const isPublicProfile = pathname.startsWith("/employer/public/");
+  const shouldShowJobSeekerHeader = isPublicProfile && userRole === "JOB_SEEKER";
+
+  if (ready && shouldShowJobSeekerHeader) {
+    return <JobSeekerLayout>{children}</JobSeekerLayout>;
+  }
 
   const handleLogout = async () => {
     localStorage.clear();
