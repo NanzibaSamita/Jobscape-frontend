@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Paperclip, FileText, Image as ImageIcon, X } from "lucide-react";
+import { Send, Paperclip, FileText, Image as ImageIcon, X, Trash2 } from "lucide-react";
 import { useAppDispatch } from "@/lib/store";
 import { showAlert } from "@/lib/store/slices/notificationSlice";
 
@@ -66,8 +66,21 @@ export default function EmployerChatPage() {
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
 
   useEffect(() => {
-    fetchRooms();
-  }, []);
+    async function init() {
+      if (applicationId) {
+        try {
+          await fetch(`${API_BASE}/chat/rooms/${applicationId}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` }
+          });
+        } catch (e) {
+          console.error("Failed to initialize room", e);
+        }
+      }
+      fetchRooms();
+    }
+    init();
+  }, [applicationId, token]);
 
   useEffect(() => {
     if (selectedRoom) {
@@ -166,6 +179,36 @@ export default function EmployerChatPage() {
     }
   }
 
+  async function deleteRoom() {
+    if (!selectedRoom) return;
+    if (!confirm("Are you sure you want to delete this chat permanently? This action cannot be undone.")) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/chat/rooms/${selectedRoom.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error('Failed to delete chat');
+
+      dispatch(showAlert({
+        title: "Chat Deleted",
+        message: "The conversation was removed",
+        type: "success"
+      }));
+
+      setSelectedRoom(null);
+      setMessages([]);
+      await fetchRooms();
+    } catch (e: any) {
+      dispatch(showAlert({
+        title: "Error",
+        message: e.message || "Failed to delete chat",
+        type: "error"
+      }));
+    }
+  }
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     const MAX_MB = 10;
@@ -244,11 +287,22 @@ export default function EmployerChatPage() {
           ) : (
             <>
               {/* Chat header */}
-              <div className="p-4 border-b">
-                <p className="font-semibold text-gray-900">{selectedRoom.other_party_name}</p>
-                {selectedRoom.job_title && (
-                  <p className="text-xs text-purple-600">{selectedRoom.job_title}</p>
-                )}
+              <div className="p-4 border-b flex justify-between items-center bg-gray-50/50">
+                <div>
+                  <p className="font-semibold text-gray-900">{selectedRoom.other_party_name}</p>
+                  {selectedRoom.job_title && (
+                    <p className="text-xs text-purple-600 font-medium">{selectedRoom.job_title}</p>
+                  )}
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={deleteRoom}
+                  className="text-gray-400 hover:text-red-600 hover:bg-red-50"
+                  title="Delete Chat"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
 
               {/* Messages */}
@@ -356,7 +410,6 @@ export default function EmployerChatPage() {
             </>
           )}
         </main>
-
       </div>
     </div>
   );

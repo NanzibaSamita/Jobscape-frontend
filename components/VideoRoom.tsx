@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Camera, CameraOff, Mic, MicOff, PhoneOff, Settings, Users, MessageSquare, Clock } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { Camera, CameraOff, Mic, MicOff, PhoneOff, Users, Clock, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import InterviewReviewModal from "@/components/InterviewReviewModal";
 
 interface VideoRoomProps {
   interviewId: string;
@@ -34,140 +35,285 @@ export default function VideoRoom({ interviewId, token, onLeave }: VideoRoomProp
   const [status, setStatus] = useState("Connecting...");
   
   // Room State
-  const [roomState, setRoomState] = useState<RoomState | null>(null);
-  const [isAdmitted, setIsAdmitted] = useState(false);
+  const [roomState, setRoomState] = useState<RoomState & { my_id: string } | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [interviewEnded, setInterviewEnded] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
   const pc = useRef<RTCPeerConnection | null>(null);
+  const lastActiveId = useRef<string | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  // Guard against React StrictMode double-mounting
+  const isMounted = useRef(false);
+  // FIX: Keep a ref to localStream so async callbacks always see the latest value
+  const localStreamRef = useRef<MediaStream | null>(null);
 
   const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
 
   useEffect(() => {
-    async function setupMedia() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-        
-        initializeWebsocket(stream);
-      } catch (err) {
-        console.error("Error accessing media devices:", err);
-        setStatus("Failed to access camera/microphone");
-      }
-    }
+    // Prevent StrictMode double-init
+    if (isMounted.current) return;
+    isMounted.current = true;
 
+    initializeWebsocket();
     setupMedia();
 
     return () => {
-      localStream?.getTracks().forEach(track => track.stop());
+      isMounted.current = false;
+      localStreamRef.current?.getTracks().forEach(track => track.stop());
       ws.current?.close();
       pc.current?.close();
     };
   }, []);
 
-  // Initialize WebRTC only when admitted or if host
+  async function setupMedia() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+    } catch (err) {
+      console.error("Error accessing media devices:", err);
+      setStatus("Connected (No Camera/Mic)");
+      // Create a dummy stream so WebRTC can still initialize signaling
+      const dummy = new MediaStream();
+      localStreamRef.current = dummy;
+      setLocalStream(dummy);
+    }
+  }
+
+  // Derived state: am I the one currently in the call?
+  const isCurrentlyAdmitted = roomState?.is_host || (roomState?.active_candidate_id === roomState?.my_id && roomState?.my_id !== undefined);
+
+  // Initialize WebRTC and handle auto-offer when a candidate is admitted
   useEffect(() => {
-    if ((roomState?.is_host || isAdmitted) && localStream && !pc.current) {
-      initializePeerConnection(localStream);
+    if (isCurrentlyAdmitted && localStream !== null) {
+      // For host: If the active candidate changed, reset the connection
+      if (roomState?.is_host && roomState.active_candidate_id !== lastActiveId.current) {
+        if (pc.current) {
+          pc.current.close();
+          pc.current = null;
+        }
+        setRemoteStream(null);
+        lastActiveId.current = roomState.active_candidate_id;
+      }
+
+      if (!pc.current) {
+        const newPc = initializePeerConnection(localStream);
+        
+        // If we're the host and a candidate was just admitted, auto-send the offer
+        if (roomState?.is_host && roomState.active_candidate_id) {
+          setTimeout(async () => {
+            if (newPc && newPc.signalingState === "stable") {
+              try {
+                const offer = await newPc.createOffer();
+                await newPc.setLocalDescription(offer);
+                sendWsMessage(newPc.localDescription);
+              } catch (e) {
+                console.error("Auto-offer failed:", e);
+              }
+            }
+          }, 1000); // increased from 600ms
+        }
+      }
     }
     
-    // Close PC if no longer active candidate
-    if (!roomState?.is_host && !isAdmitted && pc.current) {
+    // Close PC if no longer active candidate (and not host)
+    if (!isCurrentlyAdmitted && pc.current) {
         pc.current.close();
         pc.current = null;
         setRemoteStream(null);
+        lastActiveId.current = null;
     }
-  }, [roomState?.is_host, isAdmitted, localStream]);
+  }, [isCurrentlyAdmitted, localStream, roomState?.active_candidate_id]);
 
-  const initializeWebsocket = (stream: MediaStream) => {
-    ws.current = new WebSocket(`${WS_URL}/video/ws/${interviewId}?token=${token}`);
-
-    ws.current.onopen = () => {
-      setStatus("Connected to server");
-    };
-
-    ws.current.onmessage = async (event) => {
-      const data = JSON.parse(event.data);
-      
-      if (data.type === "room_state") {
-        setRoomState(data);
-        const amIActive = data.active_candidate_id && !data.is_host; // Simple check for now
-        // A better check: find my user_id if we had it. For now, we'll rely on the server's broadcast logic
-        // But since we don't know our own user_id here easily, we'll check if we receive signaling
-      } else if (data.type === "offer") {
-        setIsAdmitted(true);
-        await pc.current?.setRemoteDescription(new RTCSessionDescription(data));
-        const answer = await pc.current?.createAnswer();
-        await pc.current?.setLocalDescription(answer);
-        ws.current?.send(JSON.stringify(pc.current?.localDescription));
-      } else if (data.type === "answer") {
-        await pc.current?.setRemoteDescription(new RTCSessionDescription(data));
-      } else if (data.type === "candidate") {
-        await pc.current?.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
-    };
-
-    ws.current.onerror = (err) => {
-      console.error("WebSocket error:", err);
-      setStatus("Connection error");
-    };
+  /** Send a message, ensuring WS is open first */
+  const sendWsMessage = (data: unknown) => {
+    const payload = JSON.stringify(data);
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(payload);
+    } else {
+      // Queue it to send once connected
+      const checkAndSend = setInterval(() => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          ws.current.send(payload);
+          clearInterval(checkAndSend);
+        }
+      }, 200);
+      setTimeout(() => clearInterval(checkAndSend), 5000);
+    }
   };
 
-  const initializePeerConnection = (stream: MediaStream) => {
-    const config = {
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  const initializeWebsocket = () => {
+    // Don't create new socket if one is already open
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) return;
+
+    const socket = new WebSocket(`${WS_URL}/video/ws/${interviewId}?token=${token}`);
+    ws.current = socket;
+
+    socket.onopen = () => {
+      setStatus("Connected to server");
+      console.log("WebSocket connected");
     };
-    pc.current = new RTCPeerConnection(config);
 
-    stream.getTracks().forEach(track => pc.current?.addTrack(track, stream));
+    socket.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+      
+      if (data.type === "error") {
+        // Server sent an auth error (e.g. expired token)
+        setStatus(`⚠️ ${data.reason || "Server error"}`);
+        // Stop reconnecting — the user needs to refresh
+        isMounted.current = false;
+        return;
+      } else if (data.type === "room_state") {
+        setRoomState(data);
+      } else if (data.type === "offer") {
+        // FIX: Use localStreamRef so we always have the latest stream value,
+        // even if the state hasn't updated yet in this async closure.
+        const stream = localStreamRef.current;
 
-    pc.current.onicecandidate = (event) => {
-      if (event.candidate) {
-        ws.current?.send(JSON.stringify({ type: "candidate", candidate: event.candidate }));
+        // If stream isn't ready yet, wait for it (up to 5s)
+        let resolvedStream = stream;
+        if (!resolvedStream) {
+          let waited = 0;
+          while (!localStreamRef.current && waited < 5000) {
+            await new Promise(r => setTimeout(r, 100));
+            waited += 100;
+          }
+          resolvedStream = localStreamRef.current;
+        }
+
+        if (!pc.current && resolvedStream !== null) {
+          initializePeerConnection(resolvedStream);
+        }
+
+        // Wait for pc to be initialized
+        let retry = 0;
+        while (!pc.current && retry < 10) {
+            await new Promise(r => setTimeout(r, 100));
+            retry++;
+        }
+
+        if (pc.current) {
+            try {
+              await pc.current.setRemoteDescription(new RTCSessionDescription(data));
+              const answer = await pc.current.createAnswer();
+              await pc.current.setLocalDescription(answer);
+              sendWsMessage(pc.current.localDescription);
+            } catch(e) {
+              console.error("Error processing offer:", e);
+            }
+        }
+      } else if (data.type === "candidate") {
+        try { await pc.current?.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch(e) {}
+      } else if (data.type === "interview_ended") {
+        console.log("Interview ended by employer");
+        setInterviewEnded(true);
+        // Clean up connections
+        if (pc.current) {
+            pc.current.close();
+            pc.current = null;
+        }
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => track.stop());
+            localStreamRef.current = null;
+            setLocalStream(null);
+        }
       }
     };
 
-    pc.current.ontrack = (event) => {
+    socket.onerror = (err) => {
+      console.error("WebSocket error:", err);
+      setStatus("Connection error — retrying...");
+    };
+
+    socket.onclose = (event) => {
+      console.log("WebSocket closed:", event.code, event.reason);
+      // Only reconnect on unexpected drops (not intentional close or after an error message)
+      if (event.code !== 1000 && event.code !== 1001 && isMounted.current) {
+        setStatus("Reconnecting...");
+        setTimeout(() => {
+          if (isMounted.current) initializeWebsocket();
+        }, 2000);
+      }
+    };
+
+  };
+
+  const initializePeerConnection = (stream: MediaStream): RTCPeerConnection => {
+    const config = {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" }
+      ]
+    };
+    const newPc = new RTCPeerConnection(config);
+    pc.current = newPc;
+
+    let hasTracks = false;
+    if (stream) {
+      const tracks = stream.getTracks();
+      if (tracks.length > 0) {
+        hasTracks = true;
+        tracks.forEach(track => newPc.addTrack(track, stream));
+      }
+    }
+
+    // Force receiving video/audio even if we have no local tracks
+    if (!hasTracks) {
+      newPc.addTransceiver('video', { direction: 'recvonly' });
+      newPc.addTransceiver('audio', { direction: 'recvonly' });
+    }
+
+    newPc.onicecandidate = (event) => {
+      if (event.candidate) {
+        sendWsMessage({ type: "candidate", candidate: event.candidate });
+      }
+    };
+
+    newPc.ontrack = (event) => {
       setRemoteStream(event.streams[0]);
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0];
       setStatus("Connected");
     };
 
-    // If host, we wait for candidate to join and then we might need to re-offer
-    // The employer admits and then we start signaling
+    newPc.onconnectionstatechange = () => {
+      if (newPc.connectionState === "connected") setStatus("Connected");
+      else if (newPc.connectionState === "failed") setStatus("Connection failed");
+    };
+
+    return newPc;
   };
 
   const admitCandidate = (candidateId: string) => {
-      ws.current?.send(JSON.stringify({
-          type: "admit_candidate",
-          candidate_id: candidateId
-      }));
-      setIsAdmitted(true);
-      
-      // Start signaling as host
-      setTimeout(async () => {
-        if (pc.current && pc.current.signalingState === "stable") {
-            const offer = await pc.current.createOffer();
-            await pc.current.setLocalDescription(offer);
-            ws.current?.send(JSON.stringify(pc.current.localDescription));
-        }
-      }, 500);
+    sendWsMessage({ type: "admit_candidate", candidate_id: candidateId });
+    // The room_state update from the server will trigger the useEffect to send the offer
   };
 
+  // Called after the InterviewReviewModal successfully submits
+  const handleReviewSuccess = () => {
+    setShowReviewModal(false);
+    // The /video/complete-interview call inside InterviewReviewModal already
+    // handles auto-admitting the next candidate via the server.
+    // If no more candidates remain, leave the room.
+    onLeave();
+  };
+
+
   const toggleMic = () => {
-    localStream?.getAudioTracks().forEach(track => (track.enabled = !track.enabled));
+    localStreamRef.current?.getAudioTracks().forEach(track => (track.enabled = !track.enabled));
     setIsMuted(!isMuted);
   };
 
   const toggleVideo = () => {
-    localStream?.getVideoTracks().forEach(track => (track.enabled = !track.enabled));
+    localStreamRef.current?.getVideoTracks().forEach(track => (track.enabled = !track.enabled));
     setIsVideoOff(!isVideoOff);
   };
 
   // Participant View: Waiting Room
-  if (roomState && !roomState.is_host && roomState.active_candidate_id !== null && !isAdmitted) {
+  if (roomState && !roomState.is_host && !isCurrentlyAdmitted) {
       return (
         <div className="flex flex-col h-screen bg-zinc-950 text-white items-center justify-center p-6 text-center">
             <div className="max-w-md space-y-6">
@@ -176,23 +322,51 @@ export default function VideoRoom({ interviewId, token, onLeave }: VideoRoomProp
                 </div>
                 <div className="space-y-2">
                     <h1 className="text-3xl font-bold">Interview in Progress</h1>
-                    <p className="text-zinc-400">The employer is currently interviewing another candidate. Please stay on this page; you will be joined automatically when they are ready.</p>
+                    <p className="text-zinc-400">The employer is currently interviewing another candidate or setting up. Please stay on this page; you will be joined automatically when they are ready.</p>
                 </div>
                 
                 <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800">
                     <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-2">Your Status</p>
                     <div className="flex items-center justify-center gap-3">
-                        <span className="text-4xl font-black text-violet-500">#{roomState.queue_position}</span>
+                        <span className="text-4xl font-black text-violet-500">#{roomState.queue_position || "Queued"}</span>
                         <span className="text-zinc-300 font-semibold text-lg">in the queue</span>
                     </div>
                 </div>
 
-                <Button variant="outline" onClick={onLeave} className="border-zinc-800 hover:bg-zinc-900 text-zinc-400">
-                    Leave Waiting Room
-                </Button>
+                <div className="flex flex-col gap-3">
+                    <p className="text-xs text-zinc-500">WebSocket: <span className={ws.current?.readyState === WebSocket.OPEN ? "text-emerald-500" : "text-amber-500"}>{status}</span></p>
+                    <Button variant="outline" onClick={onLeave} className="border-zinc-800 hover:bg-zinc-900 text-zinc-400">
+                        Leave Waiting Room
+                    </Button>
+                </div>
             </div>
         </div>
       );
+  }
+
+  if (interviewEnded && !roomState?.is_host) {
+    return (
+      <div className="fixed inset-0 bg-zinc-950 flex items-center justify-center p-6 z-50">
+        <Card className="max-w-md w-full p-8 border-zinc-800 bg-zinc-900 shadow-2xl text-center flex flex-col items-center gap-6">
+          <div className="h-20 w-20 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-500">
+            <CheckCircle className="h-10 w-10" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-white">Interview Completed</h2>
+            <p className="text-zinc-400">
+              Thank you for participating in the interview. Your session has ended, and the employer is now evaluating your performance.
+            </p>
+          </div>
+          <div className="p-4 bg-zinc-800/50 rounded-lg border border-zinc-700 w-full text-sm text-zinc-300">
+             <Clock className="h-4 w-4 inline mr-2 text-violet-400" />
+             Please wait for an update. You will be notified of the results via email and in-app notification.
+          </div>
+          <Button onClick={onLeave} variant="outline" className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800">
+            Return to Dashboard
+          </Button>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -207,6 +381,16 @@ export default function VideoRoom({ interviewId, token, onLeave }: VideoRoomProp
           <span className="text-zinc-400 text-sm">ID: {interviewId.slice(0, 8)}...</span>
         </div>
         <div className="flex items-center gap-4">
+          {roomState?.is_host && (
+            <Button 
+                variant="destructive" 
+                size="sm" 
+                className="bg-red-600 hover:bg-red-700 text-white font-bold h-9 px-4 rounded-full shadow-lg shadow-red-500/20"
+                onClick={() => setShowReviewModal(true)}
+            >
+                End Interview Session
+            </Button>
+          )}
           <div className="flex -space-x-2">
             <div className="h-8 w-8 rounded-full border-2 border-zinc-950 bg-violet-600 flex items-center justify-center text-xs font-bold shadow-lg">ME</div>
             {remoteStream && (
@@ -231,17 +415,44 @@ export default function VideoRoom({ interviewId, token, onLeave }: VideoRoomProp
               />
             ) : (
               <div className="flex flex-col items-center gap-4 text-zinc-500">
-                <div className="h-20 w-20 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700">
-                  <Users className="h-10 w-10" />
+                <div className="h-20 w-20 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700 text-zinc-300">
+                  {status.startsWith("Connected") ? (
+                    <span className="text-2xl font-bold uppercase">
+                      {roomState?.is_host 
+                        ? (roomState.queue.find(c => c.user_id === roomState.active_candidate_id)?.name?.slice(0, 2) || "CA") 
+                        : "EM"}
+                    </span>
+                  ) : (
+                    <Users className="h-10 w-10" />
+                  )}
                 </div>
                 <div className="text-center">
-                    <p className="font-bold text-zinc-300">Waiting for candidate...</p>
-                    <p className="text-xs text-zinc-600">They will appear here once you admit them.</p>
+                  {status.startsWith("Connected") ? (
+                    <>
+                      <p className="font-bold text-zinc-300">
+                        {roomState?.is_host ? (roomState.queue.find(c => c.user_id === roomState.active_candidate_id)?.name || "Candidate") : "Employer"}
+                      </p>
+                      <p className="text-xs text-zinc-600">Connected (No Video)</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-bold text-zinc-300">
+                        {roomState?.is_host ? "Waiting for candidate..." : "Waiting for employer..."}
+                      </p>
+                      <p className="text-xs text-zinc-600">
+                        {roomState?.is_host 
+                          ? (roomState.active_candidate_id ? "Candidate is connecting..." : "They will appear here once you admit them.") 
+                          : "Connecting to video call..."}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             )}
             <div className="absolute bottom-4 left-4">
-               <Badge variant="secondary" className="bg-black/60 backdrop-blur-md border-white/10 text-white font-bold">Candidate</Badge>
+               <Badge variant="secondary" className="bg-black/60 backdrop-blur-md border-white/10 text-white font-bold">
+                 {roomState?.is_host ? (roomState.queue.find(c => c.user_id === roomState.active_candidate_id)?.name || "Candidate") : "Employer"}
+               </Badge>
             </div>
           </Card>
 
@@ -270,7 +481,7 @@ export default function VideoRoom({ interviewId, token, onLeave }: VideoRoomProp
 
         {/* Employer Waiting Room Sidebar */}
         {roomState?.is_host && (
-            <div className="w-80 bg-zinc-900 border-l border-zinc-800 flex flex-col hidden xl:flex">
+            <div className="w-80 flex-shrink-0 bg-zinc-900 border-l border-zinc-800 flex flex-col">
                 <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
                     <h3 className="font-bold flex items-center gap-2">
                         <Users className="h-4 w-4 text-violet-500" />
@@ -339,33 +550,29 @@ export default function VideoRoom({ interviewId, token, onLeave }: VideoRoomProp
         >
           {isVideoOff ? <CameraOff className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
         </Button>
-        
-        <div className="h-8 w-px bg-zinc-800 mx-2" />
-        
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-12 w-12 rounded-full bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-white hidden sm:flex"
-        >
-          <MessageSquare className="h-5 w-5" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-12 w-12 rounded-full bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-white hidden sm:flex"
-        >
-          <Settings className="h-5 w-5" />
-        </Button>
-
         <Button
           variant="destructive"
+          size="icon"
           onClick={onLeave}
-          className="h-12 px-6 rounded-full font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-transform"
+          className="h-14 w-14 rounded-full bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/30"
         >
-          <PhoneOff className="h-5 w-5 mr-2" />
-          Leave Meeting
+          <PhoneOff className="h-6 w-6" />
         </Button>
       </div>
+
+      {/* Interview Review Modal — shown when employer clicks "End Interview Session" */}
+      {roomState?.is_host && roomState.active_candidate_id && (
+        <InterviewReviewModal
+          interviewId={interviewId}
+          applicationId={roomState.active_candidate_id}
+          candidateName={
+            roomState.queue.find((c) => c.user_id === roomState.active_candidate_id)?.name ?? "Candidate"
+          }
+          isOpen={showReviewModal}
+          onClose={() => setShowReviewModal(false)}
+          onSuccess={handleReviewSuccess}
+        />
+      )}
     </div>
   );
 }

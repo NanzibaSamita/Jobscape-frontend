@@ -10,15 +10,15 @@ import { axiosInstance } from "@/lib/axios/axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Loader2, Building, Mail, MapPin, Globe, Edit, LogOut, 
+  Loader2, Building, Mail, MapPin, Globe, 
   User, Briefcase, Shield, CheckCircle, AlertCircle, 
-  Clock, Upload, Send, Plus, Eye, Search, Trash2
+  Clock, Upload, Send, Search
 } from "lucide-react";
 import Link from "next/link";
 import { getMyJobs, Job } from "@/lib/api/jobs";
+import { EmployerProfileHeader } from "@/components/company/EmployerProfileHeader";
 
 // ✅ Interfaces
 interface EmployerProfile {
@@ -250,56 +250,9 @@ export default function EmployerProfilePage() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {profile.logo_url ? (
-              <img
-                src={profile.logo_url}
-                alt={profile.company_name}
-                className="w-20 h-20 rounded-xl object-cover border-2 border-purple-200"
-              />
-            ) : (
-              <div className="w-20 h-20 rounded-xl bg-purple-100 flex items-center justify-center">
-                <Building className="h-10 w-10 text-purple-500" />
-              </div>
-            )}
-            <div>
-              <h1 className="text-3xl font-bold">{profile.company_name}</h1>
-              <p className="text-gray-600 mt-1">
-                {profile.full_name} · {profile.job_title || "Employer"}
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Link href="/employer/profile/edit">
-              <Button>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Profile
-              </Button>
-            </Link>
-            
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
-          </div>
-        </div>
+        <EmployerProfileHeader profile={profile} onLogout={handleLogout} />
 
-        <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-8">
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="jobs">My Jobs</TabsTrigger>
-            <TabsTrigger value="browse">Browse Jobs</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="profile" className="space-y-6">
+        <div className="space-y-6">
             {/* Verification Status Card */}
             <Card className="border-2">
               <CardHeader>
@@ -596,107 +549,9 @@ export default function EmployerProfilePage() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="jobs" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">My Posted Jobs</h2>
-              <Link href="/employer/jobs/create">
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Post New Job
-                </Button>
-              </Link>
-            </div>
-
-            {jobsLoading ? (
-              <div className="flex py-12 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-              </div>
-            ) : jobs.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Briefcase className="h-12 w-12 text-gray-300 mb-4" />
-                  <p className="text-gray-500 text-lg">You haven't posted any jobs yet.</p>
-                  <Link href="/employer/jobs/create" className="mt-4">
-                    <Button variant="outline">Create Your First Job Post</Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4">
-                {jobs.map((job) => (
-                  <Card key={job.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-xl">{job.title}</CardTitle>
-                          <p className="text-gray-600">{job.location} · {job.work_mode}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={job.is_active ? "default" : "secondary"}>
-                            {job.is_active ? "Active" : "Closed"}
-                          </Badge>
-                          <Link href={`/employer/jobs/${job.id}/applications`}>
-                            <Button size="sm" variant="outline">
-                              <Eye className="h-4 w-4 mr-1" />
-                              View Applications
-                            </Button>
-                          </Link>
-                          <Link href={`/employer/jobs/${job.id}/edit`}>
-                            <Button size="sm" variant="outline" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200">
-                              <Edit className="h-4 w-4 mr-1" />
-                              Edit
-                            </Button>
-                          </Link>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => handleDeleteJob(job.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Delete
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between text-sm">
-                        <p className="text-gray-500">
-                          Posted: {new Date(job.created_at).toLocaleDateString()}
-                        </p>
-                        <p className="font-medium text-purple-600">
-                          {job.experience_level}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="browse">
-            <Card>
-              <CardHeader>
-                <CardTitle>Browse Available Jobs</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center justify-center py-12 space-y-4">
-                <Search className="h-12 w-12 text-gray-300" />
-                <p className="text-gray-500 text-center max-w-md">
-                  View how your jobs appear to candidates and discover potential competitors in your industry.
-                </p>
-                <Link href="/jobs">
-                  <Button size="lg" className="bg-purple-600 hover:bg-purple-700">
-                    Go to Job Search
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        </div>
       </div>
     </div>
   );
 }
+

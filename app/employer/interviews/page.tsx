@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { 
   Calendar, Clock, Video, MapPin, Users, 
   ChevronRight, Loader2, Briefcase, Search,
-  Filter, CalendarDays
+  Filter, CalendarDays, CheckCircle2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,9 +25,9 @@ interface Interview {
   datetime: string;
   duration: number;
   style: string;
-  location: string | null;
   link: string | null;
   status: string;
+  isCompleted?: boolean;
 }
 
 export default function EmployerInterviewsPage() {
@@ -54,7 +54,8 @@ export default function EmployerInterviewsPage() {
             style: a.booked_slot_style || "video_call",
             location: a.booked_slot_location || null,
             link: a.booked_slot_meeting_link || null,
-            status: a.status
+            status: a.status,
+            isCompleted: a.interview_is_completed
           }));
         
         // Sort by date (upcoming first)
@@ -205,13 +206,18 @@ export default function EmployerInterviewsPage() {
                     </div>
 
                     <div className="flex flex-col gap-2 shrink-0 sm:w-48">
-                      {(slot.style === "video_call" && slot.scheduleId) || (slot.link?.startsWith('/')) ? (
+                      {(slot.style === "video_call" && slot.scheduleId && !slot.isCompleted) || (slot.link?.startsWith('/') && !slot.isCompleted) ? (
                         <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-11" asChild>
                           <Link href={slot.link?.startsWith('/') ? slot.link : `/interview/${slot.scheduleId}`}>
                             <Video className="h-4 w-4 mr-2" />
                             Join Video Room
                           </Link>
                         </Button>
+                      ) : slot.isCompleted ? (
+                        <Badge className="w-full justify-center py-3 bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Interview Completed
+                        </Badge>
                       ) : slot.link ? (
                         <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-11" asChild>
                           <a 

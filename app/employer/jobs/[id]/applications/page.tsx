@@ -48,6 +48,14 @@ interface Application {
   booked_slot_location?: string | null;
   booked_slot_style?: string | null;
   booked_slot_meeting_link?: string | null;
+  interview_is_completed?: boolean;
+  interview_review?: {
+    notes: string;
+    rating: number;
+    metrics: Record<string, boolean>;
+  } | null;
+  hired_at?: string | null;
+  current_employer_name?: string | null;
 }
 
 type FilterType = ApplicationStatus | "ALL" | "SCHEDULE";
@@ -62,12 +70,32 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; dot: string; la
   WITHDRAWN:           { color: "text-gray-500",   bg: "bg-gray-100 dark:bg-gray-800",    dot: "bg-gray-300",   label: "Withdrawn" },
 };
 
-function StatusBadge({ status }: { status: string }) {
+function calculateDuration(startDateStr: string | null | undefined) {
+  if (!startDateStr) return null;
+  const start = new Date(startDateStr);
+  const now = new Date();
+  
+  const diffTime = Math.abs(now.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 30) return `${diffDays} days`;
+  const months = Math.floor(diffDays / 30);
+  if (months < 12) return `${months} month${months > 1 ? 's' : ''}`;
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  return `${years} yr${years > 1 ? 's' : ''}${remainingMonths > 0 ? ` ${remainingMonths} mo` : ''}`;
+}
+
+function StatusBadge({ status, isCompleted }: { status: string; isCompleted?: boolean }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.PENDING;
+  let label = cfg.label;
+  if (status === "INTERVIEW_SCHEDULED" && isCompleted) {
+    label = "Evaluate";
+  }
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.color}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
-      {cfg.label}
+      {label}
     </span>
   );
 }
@@ -303,8 +331,6 @@ const STYLES = [
   { value: "in_person", label: "In-Person", icon: MapPin },
   { value: "video_call", label: "Video Call", icon: Video },
   { value: "phone_call", label: "Phone Call", icon: Phone },
-  { value: "technical", label: "Technical", icon: Award },
-  { value: "panel", label: "Panel", icon: Users },
 ];
 
 function InterviewModal({ applicationId, open, onClose, onSuccess }: {
@@ -317,6 +343,7 @@ function InterviewModal({ applicationId, open, onClose, onSuccess }: {
   const [meetingLink, setMeetingLink] = useState("");
   const [instructions, setInstructions] = useState("");
   const [allowStyleChoice, setAllowStyleChoice] = useState(false);
+  const [selectedStyles, setSelectedStyles] = useState<string[]>(["video_call"]);
   const [sending, setSending] = useState(false);
 
   function addSlot() {
@@ -327,6 +354,11 @@ function InterviewModal({ applicationId, open, onClose, onSuccess }: {
   }
   function updateSlot(i: number, field: "datetime" | "duration", val: string | number) {
     setSlots(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: val } : s));
+  }
+  function toggleAvailableStyle(val: string) {
+    setSelectedStyles(prev => 
+      prev.includes(val) ? prev.filter(s => s !== val) : [...prev, val]
+    );
   }
 
   async function handleSchedule() {
@@ -364,6 +396,7 @@ function InterviewModal({ applicationId, open, onClose, onSuccess }: {
         location: location || undefined,
         meeting_link: meetingLink || undefined,
         allow_style_choice: allowStyleChoice,
+        available_styles: allowStyleChoice ? selectedStyles : undefined,
         instructions: instructions || undefined,
       };
 
@@ -404,17 +437,25 @@ function InterviewModal({ applicationId, open, onClose, onSuccess }: {
         <div className="space-y-5 py-2">
           {/* Style picker */}
           <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">Interview Style</label>
-            <div className={`grid grid-cols-3 gap-2 ${allowStyleChoice ? "opacity-50 pointer-events-none" : ""}`}>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">
+              {allowStyleChoice ? "Available Interview Styles (Candidate will choose one)" : "Interview Style"}
+            </label>
+            <div className="grid grid-cols-3 gap-2">
               {STYLES.map(s => {
                 const Icon = s.icon;
+                const active = allowStyleChoice ? selectedStyles.includes(s.value) : (style === s.value);
                 return (
                   <button
                     key={s.value}
-                    onClick={() => setStyle(s.value)}
-                    disabled={allowStyleChoice}
+                    onClick={() => {
+                      if (allowStyleChoice) {
+                        toggleAvailableStyle(s.value);
+                      } else {
+                        setStyle(s.value);
+                      }
+                    }}
                     className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-all
-                      ${style === s.value && !allowStyleChoice
+                      ${active
                         ? "border-purple-500 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
                         : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
                       }`}
@@ -953,7 +994,7 @@ export default function JobApplicationsPage() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 mt-1">
-                                <StatusBadge status={app.status} />
+                                <StatusBadge status={app.status} isCompleted={app.interview_is_completed} />
                                 <ATSBadge score={app.ats_score} />
                               </div>
                             </div>
@@ -979,7 +1020,7 @@ export default function JobApplicationsPage() {
                             )}
                             
                             {/* Confirmed Interview Slot */}
-                            {app.status === "INTERVIEW_SCHEDULED" && app.booked_slot_datetime && (
+                            {app.status === "INTERVIEW_SCHEDULED" && app.booked_slot_datetime && !app.interview_is_completed && (
                               <div className="mt-3 bg-emerald-50 dark:bg-emerald-900/20 p-2.5 rounded-lg border border-emerald-100 dark:border-emerald-800/50">
                                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold text-[10px] uppercase tracking-wider mb-2">
                                   <Calendar className="h-3 w-3" />
@@ -1012,6 +1053,103 @@ export default function JobApplicationsPage() {
                                       </div>
                                     )}
                                   </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {app.status === "INTERVIEW_SCHEDULED" && app.interview_is_completed && !app.interview_review && (
+                              <div className="mt-3 bg-violet-50 dark:bg-violet-900/20 p-2.5 rounded-lg border border-violet-100 dark:border-violet-800/50">
+                                <div className="flex items-center gap-2 text-violet-700 dark:text-violet-400 font-bold text-[10px] uppercase tracking-wider">
+                                  <ClipboardCheck className="h-3 w-3" />
+                                  Interview Completed
+                                </div>
+                                <p className="text-[10px] text-gray-500 mt-1">Submit your evaluation and notes to advance the candidate.</p>
+                              </div>
+                            )}
+
+                            {/* Next Steps / Review Summary */}
+                            {app.interview_review && (
+                              <div className="mt-4 bg-gray-50 dark:bg-zinc-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+                                <div className="px-4 py-2.5 bg-gray-100/50 dark:bg-zinc-800 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                                    <TrendingUp className="h-3 w-3" />
+                                    Next Steps & Evaluation
+                                  </span>
+                                  <div className="flex items-center gap-0.5">
+                                    {[1, 2, 3, 4, 5].map((s) => (
+                                      <Star key={s} className={`h-3 w-3 ${s <= (app.interview_review?.rating || 0) ? "text-amber-400 fill-amber-400" : "text-gray-300 dark:text-gray-700"}`} />
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="p-4 space-y-3">
+                                  {app.interview_review.notes && (
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 italic bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-50 dark:border-gray-800">
+                                      "{app.interview_review.notes}"
+                                    </div>
+                                  )}
+
+                                  {/* Evaluation Metrics */}
+                                  {app.interview_review.metrics && Object.keys(app.interview_review.metrics).length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {Object.entries(app.interview_review.metrics).map(([key, value]) => (
+                                        value && (
+                                          <Badge key={key} variant="secondary" className="text-[9px] h-5 bg-white dark:bg-zinc-900 border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-400 capitalize">
+                                            {key.replace("_", " ")}
+                                          </Badge>
+                                        )
+                                      ))}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Decision Actions - Hide if already Accepted/Hired */}
+                                  {app.status !== "ACCEPTED" && app.status !== "HIRED" && (
+                                    <div className="flex items-center gap-2 pt-1">
+                                      {selectionProcess && app.current_round < selectionProcess.rounds.length && (
+                                        <Button 
+                                          size="sm" 
+                                          onClick={() => handleAdvance(app.id)} 
+                                          disabled={updatingStatus === app.id} 
+                                          className="h-8 text-[11px] bg-violet-600 hover:bg-violet-700 text-white rounded-lg flex-1"
+                                        >
+                                          {updatingStatus === app.id ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <TrendingUp className="h-3 w-3 mr-1.5" />}
+                                          Advance Round
+                                        </Button>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        className="h-8 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex-1"
+                                        onClick={() => handleStatusUpdate(app.id, "ACCEPTED")}
+                                        disabled={updatingStatus === app.id}
+                                      >
+                                        <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                                        Select / Accept
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 text-[11px] text-red-500 border-red-100 hover:bg-red-50 rounded-lg flex-1"
+                                        onClick={() => handleStatusUpdate(app.id, "REJECTED")}
+                                        disabled={updatingStatus === app.id}
+                                      >
+                                        <XCircle className="h-3 w-3 mr-1.5" />
+                                        Reject
+                                      </Button>
+                                    </div>
+                                  )}
+
+                                  {/* Employment Info for Hired Candidates */}
+                                  {app.status === "HIRED" && (
+                                    <div className="mt-2 p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-emerald-100 dark:border-emerald-800/50 flex items-center justify-between">
+                                      <div className="flex flex-col">
+                                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Employee Status</span>
+                                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Currently working at {app.current_employer_name || "this company"}</span>
+                                      </div>
+                                      <div className="text-right">
+                                        <span className="text-[10px] text-gray-400 block uppercase">Duration</span>
+                                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{calculateDuration(app.hired_at)}</span>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -1098,30 +1236,31 @@ export default function JobApplicationsPage() {
                             </>
                           )}
 
-                          {app.status === "INTERVIEW_SCHEDULED" && (
-                            <>
-                              <Button 
-                                size="sm" 
-                                onClick={() => handleStartInterview(app.id)} 
-                                disabled={startingInterview === app.id} 
-                                className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                              >
-                                {startingInterview === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5 mr-1" />}
-                                Start Interview
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={async () => {
-                                   const res = await axiosInstance.get(`/interviews/application/${app.id}`);
-                                   setReviewTarget({ id: res.data.schedule_id, appId: app.id, name });
-                                }}
-                                className="text-xs border-violet-200 text-violet-700 hover:bg-violet-50"
-                              >
-                                <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
-                                Evaluate
-                              </Button>
-                            </>
+                          {app.status === "INTERVIEW_SCHEDULED" && !app.interview_is_completed && (
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleStartInterview(app.id)} 
+                              disabled={startingInterview === app.id} 
+                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              {startingInterview === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5 mr-1" />}
+                              Start Interview
+                            </Button>
+                          )}
+
+                          {app.status === "INTERVIEW_SCHEDULED" && !app.interview_review && (
+                            <Button
+                              variant={app.interview_is_completed ? "default" : "outline"}
+                              size="sm"
+                              onClick={async () => {
+                                 const res = await axiosInstance.get(`/interviews/application/${app.id}`);
+                                 setReviewTarget({ id: res.data.schedule_id, appId: app.id, name });
+                              }}
+                              className={`text-xs ${app.interview_is_completed ? "bg-violet-600 hover:bg-violet-700 text-white" : "border-violet-200 text-violet-700 hover:bg-violet-50"}`}
+                            >
+                              <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                              Evaluate
+                            </Button>
                           )}
 
                           {/* Chat button (for reviewed and above) */}

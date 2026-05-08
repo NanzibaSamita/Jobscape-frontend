@@ -37,14 +37,16 @@ import { Badge } from "@/components/ui/badge";
 // ✅ Validation Schema
 const roundSchema = z.object({
   id: z.string().optional(),
-  number: z.number(),
+  // FIX: number may be undefined when loaded from older API responses; default to 0 to avoid silent Zod failure
+  number: z.number().optional().default(0),
   type: z.enum(["INITIAL_SCREENING", "TECHNICAL_INTERVIEW", "HR_INTERVIEW", "CODING_ROUND", "QUIZ_TASK", "FINAL_CONVERSATION"]),
   title: z.string().min(2, "Title is required"),
   description: z.string().default(""),
-  duration_minutes: z.number().nullable(),
+  // FIX: coerce string→number for inputs that may return strings, then make nullable
+  duration_minutes: z.union([z.number(), z.null()]).nullable().default(null),
   is_online: z.boolean(),
   location_or_link: z.string().default(""),
-  time_limit_minutes: z.number().nullable(),
+  time_limit_minutes: z.union([z.number(), z.null()]).nullable().default(null),
   instructions: z.string().default(""),
 });
 
@@ -63,7 +65,7 @@ const jobEditSchema = z.object({
   application_deadline: z.string().min(1, "Application deadline is required"),
   hiring_policy: z.string().default(""),
   ats_threshold: z.number().min(0).max(100),
-  selection_rounds: z.array(roundSchema).min(1, "At least one selection round is required").max(5, "Maximum 5 rounds allowed"),
+  selection_rounds: z.array(roundSchema).min(0, "Selection rounds can be empty").max(5, "Maximum 5 rounds allowed"),
 }).refine(
   (data) => {
     if (data.salary_min && data.salary_max) {
@@ -121,7 +123,13 @@ export default function EditJobPage() {
       setIsLoading(true);
       const [jobRes, selectionRes] = await Promise.all([
         axiosInstance.get(`/jobs/${jobId}`),
-        axiosInstance.get(`/selection/job/${jobId}`).catch(() => ({ data: null }))
+        axiosInstance.get(`/selection/job/${jobId}`).catch((err) => {
+          // If no selection process exists, return null instead of throwing error
+          if (err?.response?.status === 404) {
+            return { data: null };
+          }
+          throw err; // Re-throw other errors
+        })
       ]);
 
       const job = jobRes.data;
@@ -146,18 +154,29 @@ export default function EditJobPage() {
         application_deadline: new Date(job.application_deadline).toISOString().split("T")[0],
         hiring_policy: selection?.instructions || job.hiring_policy || "",
         ats_threshold: selection?.ats_threshold ?? 60,
-        selection_rounds: selection?.rounds?.map((r: any) => ({
+        // FIX: Ensure number is always set (use index+1 as fallback), and nullable fields are explicitly null not undefined
+        selection_rounds: selection?.rounds?.map((r: any, index: number) => ({
           id: r.id,
-          number: r.number,
+          number: typeof r.number === "number" ? r.number : index + 1,
           type: r.type,
           title: r.title,
           description: r.description || "",
-          duration_minutes: r.duration_minutes,
-          is_online: r.is_online,
+          duration_minutes: r.duration_minutes ?? null,
+          is_online: r.is_online ?? true,
           location_or_link: r.location_or_link || "",
-          time_limit_minutes: r.time_limit_minutes,
+          time_limit_minutes: r.time_limit_minutes ?? null,
           instructions: r.instructions || "",
-        })) || [],
+        })) || [{
+          number: 1,
+          type: "INITIAL_SCREENING",
+          title: "Initial Screening",
+          description: "",
+          duration_minutes: 30,
+          is_online: true,
+          location_or_link: "",
+          time_limit_minutes: null,
+          instructions: "",
+        }],
       });
     } catch (err: any) {
       dispatch(showAlert({
@@ -191,6 +210,7 @@ export default function EditJobPage() {
   };
 
   const onSubmit = async (data: JobEditValues) => {
+    console.log("Form submitted with data:", data);
     setIsSaving(true);
     try {
       const deadline = new Date(data.application_deadline).toISOString();
@@ -211,7 +231,9 @@ export default function EditJobPage() {
         ats_threshold: data.ats_threshold,
       };
 
-      await axiosInstance.patch(`/jobs/${jobId}`, jobPayload);
+      console.log("Updating job with payload:", jobPayload);
+      const jobUpdateResponse = await axiosInstance.patch(`/jobs/${jobId}`, jobPayload);
+      console.log("Job update response:", jobUpdateResponse.data);
 
       const selectionPayload = {
         job_id: jobId,
@@ -225,19 +247,26 @@ export default function EditJobPage() {
         instructions: data.hiring_policy,
       };
 
+      console.log("Selection payload:", selectionPayload);
+
+      let selectionResponse;
       if (selectionProcessId) {
-        await axiosInstance.put(`/selection/${selectionProcessId}`, selectionPayload);
+        console.log("Updating existing selection process:", selectionProcessId);
+        selectionResponse = await axiosInstance.put(`/selection/${selectionProcessId}`, selectionPayload);
       } else {
-        await axiosInstance.post("/selection/", selectionPayload);
+        console.log("Creating new selection process");
+        selectionResponse = await axiosInstance.post("/selection/", selectionPayload);
       }
+      console.log("Selection response:", selectionResponse.data);
 
       dispatch(showAlert({
         title: "Success",
         message: "Job and selection process updated successfully! 🎉",
         type: "success"
       }));
-      router.push(`/employer/jobs/${jobId}/applications`);
+      router.push("/employer/jobs");
     } catch (err: any) {
+      console.error("Update error:", err);
       dispatch(showAlert({
         title: "Update Error",
         message: err?.response?.data?.detail || "Failed to update job",
@@ -246,6 +275,18 @@ export default function EditJobPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // FIX: Add onError handler so validation failures surface as alerts instead of silently blocking submit
+  const onValidationError = (errors: any) => {
+    console.error("Form validation errors:", errors);
+    const firstError = Object.values(errors)[0] as any;
+    const message = firstError?.message || firstError?.root?.message || "Please check the form for errors and try again.";
+    dispatch(showAlert({
+      title: "Validation Error",
+      message,
+      type: "error"
+    }));
   };
 
   if (isLoading) {
@@ -278,7 +319,8 @@ export default function EditJobPage() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          {/* FIX: Pass onValidationError as second arg so errors are surfaced to the user */}
+          <form onSubmit={form.handleSubmit(onSubmit, onValidationError)} className="space-y-8">
             <Card className="border-2">
               <CardHeader><CardTitle className="text-xl font-bold">1. Job Details</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -486,7 +528,7 @@ export default function EditJobPage() {
                         control={form.control}
                         name={`selection_rounds.${index}.title`}
                         render={({ field }) => (
-                          <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                          <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                         )}
                       />
                     </div>
@@ -498,7 +540,7 @@ export default function EditJobPage() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Time Limit (mins)</FormLabel>
-                              <FormControl><Input type="number" onChange={e => field.onChange(parseInt(e.target.value))} value={field.value || ""} /></FormControl>
+                              <FormControl><Input type="number" onChange={e => field.onChange(parseInt(e.target.value) || null)} value={field.value ?? ""} /></FormControl>
                             </FormItem>
                           )}
                         />
@@ -530,7 +572,7 @@ export default function EditJobPage() {
                             <FormControl>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm text-gray-500">Duration:</span>
-                                <Input type="number" className="h-8" onChange={e => field.onChange(parseInt(e.target.value))} value={field.value || ""} />
+                                <Input type="number" className="h-8" onChange={e => field.onChange(parseInt(e.target.value) || null)} value={field.value ?? ""} />
                               </div>
                             </FormControl>
                           </FormItem>
@@ -547,20 +589,26 @@ export default function EditJobPage() {
               <CardContent className="space-y-4">
                 <FormLabel>Required Skills *</FormLabel>
                 <div className="flex gap-2">
-                  <Input value={requiredSkillInput} onChange={(e) => setRequiredSkillInput(e.target.value)} />
+                  <Input value={requiredSkillInput} onChange={(e) => setRequiredSkillInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRequiredSkill())} />
                   <Button type="button" onClick={addRequiredSkill} variant="outline">Add</Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {form.watch("required_skills")?.map(s => (
-                    <Badge key={s} className="bg-purple-100 text-purple-700" onClick={() => removeRequiredSkill(s)}>{s} ×</Badge>
+                    <Badge key={s} className="bg-purple-100 text-purple-700 cursor-pointer" onClick={() => removeRequiredSkill(s)}>{s} ×</Badge>
                   ))}
                 </div>
+                <FormMessage>{form.formState.errors.required_skills?.message}</FormMessage>
               </CardContent>
             </Card>
 
             <div className="flex justify-end gap-4 pb-12">
               <Link href="/employer/profile"><Button type="button" variant="ghost">Cancel</Button></Link>
-              <Button type="submit" size="lg" className="bg-purple-600 hover:bg-purple-700 px-8" disabled={isSaving}>
+              <Button 
+                type="submit" 
+                size="lg" 
+                className="bg-purple-600 hover:bg-purple-700 px-8" 
+                disabled={isSaving}
+              >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <><Save className="h-4 w-4 mr-2" /> Update Job</>}
               </Button>
             </div>

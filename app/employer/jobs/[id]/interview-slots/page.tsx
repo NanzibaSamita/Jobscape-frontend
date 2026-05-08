@@ -15,11 +15,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const INTERVIEW_STYLES = [
   { value: "in_person",   label: "In-Person",         icon: MapPin    },
-  { value: "video_call",  label: "Video Call",         icon: Video     },
+  { value: "video_call",  label: "Video Call (WebRTC)", icon: Video     },
   { value: "phone_call",  label: "Phone Call",         icon: Phone     },
-  { value: "panel",       label: "Panel Interview",    icon: Users     },
-  { value: "technical",   label: "Technical Interview",icon: Award     },
-  { value: "case_study",  label: "Case Study",         icon: BookOpen  },
 ];
 
 interface SlotDraft {
@@ -141,6 +138,11 @@ export default function EmployerInterviewSlotsPage() {
           if (!errors[b]) errors[b] = `Slot ${b + 1} overlaps with Slot ${a + 1} (${timeB} ↔ ${timeA}).`;
         }
       }
+    }
+
+    if (mode === "seeker_choice" && selectedStyles.length === 0) {
+      dispatch(showAlert({ title: "Styles Required", message: "Please select at least one interview style that candidates can choose from.", type: "error" }));
+      return;
     }
 
     if (Object.keys(errors).length > 0) {

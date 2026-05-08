@@ -22,6 +22,7 @@ import {
   Building,
   Briefcase,
   TrendingUp,
+  PartyPopper,
 } from "lucide-react";
 import { getApplicationById, ApplicationDetail } from "@/lib/api/applications";
 
@@ -49,6 +50,7 @@ const STATUS_COLORS: Record<string, string> = {
   SHORTLISTED: "bg-purple-100 text-purple-800",
   INTERVIEW_SCHEDULED: "bg-indigo-100 text-indigo-800",
   ACCEPTED: "bg-green-100 text-green-800",
+  HIRED: "bg-emerald-600 text-white font-bold animate-pulse",
   REJECTED: "bg-red-100 text-red-800",
   WITHDRAWN: "bg-gray-100 text-gray-800",
 };
@@ -232,6 +234,31 @@ export default function SeekerApplicationDetailModal({
                 </section>
               )}
 
+              {/* Congratulatory message for ACCEPTED */}
+              {app.status === "ACCEPTED" && (
+                <section className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 p-6 text-center">
+                  <PartyPopper className="h-10 w-10 text-emerald-500 mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-emerald-900 dark:text-emerald-100 mb-1">Congratulations!</h3>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                    You've successfully cleared all interview rounds. The employer is finalizing the selection and will announce the results soon.
+                  </p>
+                </section>
+              )}
+
+              {/* Final Hired message */}
+              {app.status === "HIRED" && (
+                <section className="rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 p-6 text-center text-white shadow-xl">
+                  <Award className="h-12 w-12 text-white mx-auto mb-4 animate-bounce" />
+                  <h3 className="text-2xl font-black mb-2">You're Hired!</h3>
+                  <p className="text-violet-100 text-sm leading-relaxed mb-4">
+                    Welcome to the team at <strong>{companyName}</strong>. Your employment status has been updated, and you can now access internal company resources.
+                  </p>
+                  <Button className="bg-white text-violet-600 hover:bg-violet-50 font-bold px-8" onClick={() => window.location.href = "/jobseeker/profile"}>
+                    View My Profile
+                  </Button>
+                </section>
+              )}
+
               <Separator />
 
               {/* Booked Interview Slot */}
@@ -275,54 +302,57 @@ export default function SeekerApplicationDetailModal({
                       </div>
                     )}
 
-                    {/* Meeting Link */}
-                    {slot.meetingLink && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* External Link: Only if valid protocol */}
-                        {(slot.meetingLink.startsWith("http://") || slot.meetingLink.startsWith("https://")) ? (
-                          <a
-                            href={slot.meetingLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-sm text-violet-600 hover:underline font-medium"
-                          >
-                            <Video className="h-4 w-4" />
-                            External Join Link
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
+                    {/* Meeting Link / Join Button - Hide if Accepted/Hired */}
+                    {(slot.meetingLink || slot.style === "video_call") && app.status !== "ACCEPTED" && app.status !== "HIRED" && (
+                      <div className="pt-2">
+                        {slot.meetingLink && (slot.meetingLink.startsWith("http://") || slot.meetingLink.startsWith("https://")) ? (
+                          <div className="flex flex-col gap-3">
+                            <a
+                              href={slot.meetingLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold shadow-lg shadow-violet-500/20 transition-all active:scale-[0.98]"
+                            >
+                              <Video className="h-5 w-5" />
+                              Join Interview Meeting
+                              <ExternalLink className="h-4 w-4 opacity-70" />
+                            </a>
+                          </div>
                         ) : (
-                          <span className="text-xs text-gray-400 italic">
-                            Alt link: {slot.meetingLink}
-                          </span>
-                        )}
-                        
-                        {/* In-App Video Room Button */}
-                        {slot.style === "video_call" && (
                           <Button
-                            size="sm"
-                            className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs font-bold shadow-md shadow-violet-500/20"
-                            onClick={() => window.location.href = `/interview/${app.booked_slot_id || applicationId}`}
+                            className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold h-12 rounded-xl shadow-lg shadow-violet-500/20 active:scale-[0.98] transition-all"
+                            onClick={() => {
+                              const meetingId = app.booked_slot_id || applicationId;
+                              if (slot.meetingLink && (slot.meetingLink.startsWith("http://") || slot.meetingLink.startsWith("https://"))) {
+                                window.open(slot.meetingLink, "_blank");
+                              } else {
+                                window.location.href = `/interview/${meetingId}`;
+                              }
+                            }}
                           >
-                            <Video className="h-3.5 w-3.5 mr-1.5" />
-                            Join Video Room
+                            <Video className="h-5 w-5 mr-2" />
+                            Join Interview Room
                           </Button>
+                        )}
+
+                        {slot.meetingLink && !slot.meetingLink.startsWith("http") && !["link", "tbd", "none"].includes(slot.meetingLink.toLowerCase()) && (
+                          <p className="text-[10px] text-gray-400 mt-2 text-center italic">
+                            Meeting ID/Code: {slot.meetingLink}
+                          </p>
                         )}
                       </div>
                     )}
 
-                    {/* In-App Join Button (Fallback if link is missing but style is video_call) */}
-                    {!slot.meetingLink && slot.style === "video_call" && (
-                       <Button
-                          className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold shadow-lg shadow-violet-500/20"
-                          onClick={() => window.location.href = `/interview/${app.booked_slot_id || applicationId}`}
-                       >
-                          <Video className="h-4 w-4 mr-2" />
-                          Join Interview Room
-                       </Button>
+                    {/* Instructions */}
+                    {app.interview_instructions && (
+                      <div className="p-3 rounded-lg bg-emerald-100/50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50 text-xs text-gray-700 dark:text-gray-300">
+                        <p className="font-bold text-emerald-700 dark:text-emerald-400 mb-1 uppercase tracking-wider text-[10px]">Instructions</p>
+                        {app.interview_instructions}
+                      </div>
                     )}
 
-                    {/* Google Calendar Button */}
-                    {gcalUrl && (
+                    {/* Google Calendar Button - Hide if Accepted/Hired */}
+                    {gcalUrl && app.status !== "ACCEPTED" && app.status !== "HIRED" && (
                       <a
                         href={gcalUrl}
                         target="_blank"
